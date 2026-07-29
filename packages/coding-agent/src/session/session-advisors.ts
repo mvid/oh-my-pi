@@ -903,6 +903,7 @@ export class SessionAdvisors {
 			streaming: this.#host.agent.state.isStreaming,
 			aborting: this.#host.abortInProgress(),
 			terminalAnswerNoQueuedWork: this.#hasTerminalTextAnswerWithoutQueuedWork(),
+			lateConcern: this.#host.settings.get("advisor.lateConcern"),
 			interruptImmuneTurnActive: interrupting && this.#isAdvisorInterruptImmuneTurnActive(),
 		});
 		if (channel === "aside") {
