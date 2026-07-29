@@ -193,6 +193,7 @@ describe("AgentSession advisor auto-resume suppression", () => {
 						},
 					],
 				},
+				{ content: [], stopReason: "stop" },
 			],
 		});
 		const agent = new Agent({
