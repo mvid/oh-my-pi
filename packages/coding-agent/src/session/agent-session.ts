@@ -459,6 +459,8 @@ import {
 	cfgSkillful,
 	cfgTierAdvisor,
 	cfgTierAnthropic,
+	cfgTierAutoFastMode,
+	cfgTierAutoFastModeDurationMinutes,
 	cfgTierGoogle,
 	cfgTierOpenai,
 	cfgProvidersAnthropicSlowMode,
@@ -732,6 +734,8 @@ export class AgentSession implements SettingsScope {
 	readonly #models: ModelControls;
 	readonly #tools: SessionTools;
 	readonly #prewalk: PrewalkCoordinator;
+	#lastUserPromptAt: number | undefined;
+	#autoFastModeSuppressed = false;
 
 	readonly #providerBoundary: SessionProviderBoundary;
 	#promptTemplates: PromptTemplate[];
@@ -1796,7 +1800,7 @@ export class AgentSession implements SettingsScope {
 		// Resolve the wire service-tier per request so the Fireworks Priority
 		// toggle scopes priority to Fireworks alone, without mutating the shared
 		// session `serviceTier` that drives `/fast` and OpenAI/Anthropic priority.
-		this.agent.serviceTierResolver = model => this.#models.effectiveServiceTier(model);
+		this.agent.serviceTierResolver = model => this.#resolveMainServiceTier(model);
 		this.#titleSystemPrompt = config.titleSystemPrompt;
 		this.#transformContext = config.transformContext ?? (messages => messages);
 		this.#sideStreamFn = config.sideStreamFn ?? streamSimple;
@@ -5961,6 +5965,11 @@ export class AgentSession implements SettingsScope {
 		return this.#models.serviceTierByFamily;
 	}
 
+	/** Configured tier without temporary user-activity priority. */
+	configuredServiceTier(model: Model): ServiceTier | undefined {
+		return this.#models.effectiveServiceTier(model);
+	}
+
 	/** Whether agent is currently streaming a response */
 	get isStreaming(): boolean {
 		return this.agent.state.isStreaming || this.#promptInFlightCount > 0;
@@ -7153,15 +7162,18 @@ export class AgentSession implements SettingsScope {
 		const templated = expandPromptTemplates ? expandPromptTemplate(text, [...this.#promptTemplates]) : text;
 		const expandedText = options?.synthetic ? templated : this.#modelMentions.expandMentions(templated);
 
+		const promptAttribution = options?.attribution ?? (options?.synthetic ? "agent" : "user");
+		const userInitiated = options?.userInitiated ?? (!options?.synthetic && promptAttribution === "user");
+
 		// Magic keywords (see modes/magic-keywords.ts): append hidden system notices after the
 		// user's message that steer this turn. User-authored prompts only — synthetic /
 		// agent-initiated turns never trigger them.
-		const keywordNotices = options?.synthetic ? [] : this.#createMagicKeywordNotices(expandedText);
+		const keywordNotices = !options?.synthetic && userInitiated ? this.#createMagicKeywordNotices(expandedText) : [];
 
 		// A user-initiated prompt (typed message or the `.`/`c` continue shortcut)
 		// re-enables advisor auto-resume that a prior user interrupt suppressed.
 		// Agent-initiated synthetic prompts (auto-continue, plan, reminders) do not.
-		if (options?.userInitiated ?? !options?.synthetic) {
+		if (userInitiated) {
 			this.#advisors.autoResumeSuppressed = false;
 			this.#planModeReminderCount = 0;
 			this.#planModeReminderAwaitingProgress = false;
@@ -7170,7 +7182,6 @@ export class AgentSession implements SettingsScope {
 			this.#toolChoiceQueue.removeByLabel("plan-mode-decision");
 		}
 
-		const promptAttribution = options?.attribution ?? (options?.synthetic ? "agent" : "user");
 
 		// If streaming, queue via steer()/followUp()/aside based on option
 		if (this.isStreaming) {
@@ -7193,6 +7204,7 @@ export class AgentSession implements SettingsScope {
 				rawText: typedText,
 				onPromptAdmitted: options?.onPromptAdmitted,
 				promptGeneration: queueGeneration,
+				userInitiated,
 			});
 			outcome.sessionClaimed = queued;
 			if (!queued && this.#promptGeneration !== queueGeneration && !options?.synthetic) {
@@ -7266,6 +7278,7 @@ export class AgentSession implements SettingsScope {
 				attribution: promptAttribution,
 				prependMessages: keywordNotices,
 				rawText: typedText,
+				userInitiated,
 				preprocessed: {
 					images: normalizedImages,
 					descriptionNotice: imageDescriptionNotice,
@@ -7305,6 +7318,8 @@ export class AgentSession implements SettingsScope {
 		if (eagerTaskPrelude) {
 			preludeMessages.push(eagerTaskPrelude);
 		}
+
+		if (userInitiated) this.#recordUserActivity();
 
 		// A user prompt on a kept-alive subagent (focused-session steering) starts a
 		// turn no task executor drives: observe it like an IRC wake so an accepted
@@ -7407,6 +7422,7 @@ export class AgentSession implements SettingsScope {
 			| undefined,
 		outcome: PromptDispatchOutcome,
 	): Promise<boolean> {
+		const userInitiated = message.attribution === "user";
 		const textContent =
 			typeof message.content === "string"
 				? message.content
@@ -7444,6 +7460,7 @@ export class AgentSession implements SettingsScope {
 				throw new AgentBusyError();
 			}
 
+			if (userInitiated) this.#recordUserActivity();
 			await this.#queueCustomMessage(message, streamingBehavior, {
 				queueChipText: options?.queueChipText,
 				prependMessages: keywordNotices,
@@ -7489,6 +7506,7 @@ export class AgentSession implements SettingsScope {
 				outcome.sessionClaimed = this.agent.state.isStreaming;
 				throw new AgentBusyError();
 			}
+			if (userInitiated) this.#recordUserActivity();
 			await this.#queueCustomMessage(message, streamingBehavior, {
 				queueChipText: options?.queueChipText,
 				preprocessed: { content: preparedMessage.content, descriptionNotice },
@@ -7498,6 +7516,7 @@ export class AgentSession implements SettingsScope {
 			outcome.sessionClaimed = true;
 			return true;
 		}
+		if (userInitiated) this.#recordUserActivity();
 		outcome.sessionClaimed = await this.#promptWithMessage(preparedMessage, textContent, {
 			...options,
 			prependMessages:
@@ -8171,9 +8190,11 @@ export class AgentSession implements SettingsScope {
 			 * message is not queued, matching prompt()'s idle drop.
 			 */
 			promptGeneration?: number;
+			userInitiated?: boolean;
 		},
 	): Promise<boolean> {
 		const attribution = options?.attribution ?? "user";
+		const userInitiated = options?.userInitiated ?? attribution === "user";
 		const timestamp = options?.timestamp;
 		const rawText = options?.rawText ?? text;
 		const preprocessed = options?.preprocessed;
@@ -8190,7 +8211,8 @@ export class AgentSession implements SettingsScope {
 		// user-driven (folds into context via #resumeStrandedIrcAsides's post-interrupt
 		// branch) until the next deliberate steer/follow-up/prompt, matching the
 		// sendCustomMessage aside path (queueAside), which never touches this flag.
-		if (mode !== "aside") this.#advisors.autoResumeSuppressed = false;
+		if (userInitiated) this.#recordUserActivity();
+		if (userInitiated && mode !== "aside") this.#advisors.autoResumeSuppressed = false;
 		// The pre-dispatch re-check in prompt() arrives with normalization and the
 		// vision description already done — reuse them instead of paying a second
 		// vision-model request for the same attachment.
@@ -9825,7 +9847,9 @@ export class AgentSession implements SettingsScope {
 
 	/** Reports whether priority service is realized by the active model. */
 	isFastModeActive(): boolean {
-		return this.#models.isFastModeActive();
+		const model = this.agent.state.model;
+		if (!model || !realizesPriorityServiceTier(this.#resolveMainServiceTier(model), model)) return false;
+		return model.provider !== "anthropic" || !isAnthropicFastModeFallbackDisabled(this.providerSessionState, model);
 	}
 
 	/** Effective wire service tier for a request to `model` under the live per-family tiers. */
@@ -9902,12 +9926,37 @@ export class AgentSession implements SettingsScope {
 
 	/** Enables or disables priority service for the active model family. */
 	setFastMode(enabled: boolean): boolean {
-		return this.#models.setFastMode(enabled);
+		const changed = this.#models.setFastMode(enabled);
+		if (changed && !enabled) this.#autoFastModeSuppressed = true;
+		return changed;
 	}
 
-	/** Toggles priority service for the active model family. */
+	/** Toggles priority based on configured and currently realized state. */
 	toggleFastMode(): boolean {
-		return this.#models.toggleFastMode();
+		if (!this.setFastMode(!this.isFastModeActive())) return false;
+		return this.#models.isFastModeEnabled();
+	}
+
+	#recordUserActivity(): void {
+		if (this.#agentKind !== "main") return;
+		this.#lastUserPromptAt = Date.now();
+		this.#autoFastModeSuppressed = false;
+	}
+
+	#resolveMainServiceTier(model: Model): ServiceTier | undefined {
+		const configuredTier = this.#models.effectiveServiceTier(model);
+		if (configuredTier !== undefined) return configuredTier;
+		if (
+			!cfgTierAutoFastMode.get(this.settings) ||
+			this.#autoFastModeSuppressed ||
+			this.#lastUserPromptAt === undefined ||
+			!serviceTierFamily(model) ||
+			!realizesPriorityServiceTier("priority", model)
+		) {
+			return undefined;
+		}
+		const autoFastModeActivityWindowMs = cfgTierAutoFastModeDurationMinutes.get(this.settings) * 60 * 1000;
+		return Date.now() - this.#lastUserPromptAt < autoFastModeActivityWindowMs ? "priority" : undefined;
 	}
 
 	/** Reports whether `/fast ultra` (the OpenAI `ultrafast` tier) is selected for the active model. */
