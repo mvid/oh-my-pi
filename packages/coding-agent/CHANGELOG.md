@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added opt-in `tier.autoFastMode` and `tier.autoFastModeDurationMinutes` settings for temporary priority processing after primary-session user prompts ([#7207](https://github.com/can1357/oh-my-pi/pull/7207) by [@mvid](https://github.com/mvid)).
 - Files the write tool creates now preview the way the matching code blocks in replies do, building up while the write streams: `.svg` as an image and Mermaid (`.mmd`, `.mermaid`) as a diagram under the write card, and in Tern also 3D models (`.obj`, `.ply`, `.wrl`, `.x3dv`, `.stl`, `.gltf`, `.usda`); in Tern an SVG write now draws like an SVG figure in a reply
 
 ### Changed
