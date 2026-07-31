@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import { formatKeyHint } from "@oh-my-pi/pi-tui/app-keybindings";
+import { serviceTierFamily } from "@oh-my-pi/pi-ai";
 import {
 	formatModelString,
 	getModelMatchPreferences,
@@ -78,7 +79,9 @@ async function runWithDetachedModeDraft(
 
 /** `/fast status` label for the active model: "on" when its family is priority, else "off". */
 function formatFastModeStatus(session: AgentSession): string {
-	return session.isFastModeEnabled() ? "on" : "off";
+	const model = session.model;
+	if (!model || !serviceTierFamily(model)) return "off";
+	return session.isFastModeActive() ? "on" : "off";
 }
 
 const SLOW_UNSUPPORTED =
