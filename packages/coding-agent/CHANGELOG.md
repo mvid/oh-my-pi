@@ -5,10 +5,14 @@
 ### Added
 
 - Added opt-in `tier.autoFastMode` and `tier.autoFastModeDurationMinutes` settings for temporary priority processing after primary-session user prompts ([#7207](https://github.com/can1357/oh-my-pi/pull/7207) by [@mvid](https://github.com/mvid)).
+- Added a red status-line fast-mode icon for priority that is requested but refused. `AgentSession.fastModeState()` splits the old boolean into `off` / `active` / `blocked`; `blocked` covers an Anthropic fast-mode rejection, an OpenAI `service_tier` downgrade, and an account the provider says cannot use priority. `/fast status` reports `blocked` for the same state, and a served priority turn clears it without an explicit re-arm.
+- Added `UsageReport.priorityEntitlement`, populated from the Claude usage endpoint's `spend.enabled` / `extra_usage.is_enabled`. Anthropic gates fast mode on usage credits, so `tier.autoFastMode` now skips the request when the account is known to be ineligible instead of spending a rejected round-trip per process. An explicit `/fast on` still attempts it (the snapshot can be stale) and warns up front.
+- Added detection of OpenAI priority downgrades: the standard Responses path already reads the served `service_tier` for cost, and now also marks the turn's `disabledFeatures` when a `priority` request comes back at a lower tier, so the indicator stops claiming priority the account never got. Scoped to `provider: "openai"` — the Codex endpoint echoes a `service_tier` unrelated to what it served (`resolveCodexCostServiceTier` already treats it as no information), so reading a downgrade out of it would report every Codex turn as refused.
 - Files the write tool creates now preview the way the matching code blocks in replies do, building up while the write streams: `.svg` as an image and Mermaid (`.mmd`, `.mermaid`) as a diagram under the write card, and in Tern also 3D models (`.obj`, `.ply`, `.wrl`, `.x3dv`, `.stl`, `.gltf`, `.usda`); in Tern an SVG write now draws like an SVG figure in a reply
 
 ### Changed
 
+- Bumped the Anthropic usage-report cache key to v4. The report cache is persistent sqlite shared by every omp process on the machine, so without the bump a build predating `priorityEntitlement` keeps refilling the slot with entitlement-free reports and the priority gate reads "unknown" for as long as one old process is running.
 - Inside a Tern pane, browser opens with `headed: false` now show as a Tern picture-in-picture too; only `app.tern: false` (or `browser.tern` / `PI_BROWSER_TERN=0`) opens Chromium instead
 - Inside a Tern pane, `/fork` opens the fork in a new pane beside the original, which keeps the original session
 - Roughly halved browser `extract` time in text mode on large pages ([#14668](https://github.com/can1357/oh-my-pi/pull/14668) by [@H4vC](https://github.com/H4vC))
