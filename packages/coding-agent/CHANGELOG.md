@@ -5,6 +5,7 @@
 ### Added
 
 - Files the write tool creates now preview the way the matching code blocks in replies do, building up while the write streams: `.svg` as an image and Mermaid (`.mmd`, `.mermaid`) as a diagram under the write card, and in Tern also 3D models (`.obj`, `.ply`, `.wrl`, `.x3dv`, `.stl`, `.gltf`, `.usda`); in Tern an SVG write now draws like an SVG figure in a reply
+- Added a `display.showUsageModels` setting (default `true`) that opts out of the "Models with usage data" list in `/usage`, for users who only want the quota bars. Leaving it at the default keeps the existing `/usage` output unchanged.
 
 ### Changed
 
