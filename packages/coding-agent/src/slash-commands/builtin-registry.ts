@@ -3166,9 +3166,14 @@ export const BUILTIN_SLASH_COMMANDS_INTERNAL: ReadonlyArray<SlashCommandSpec> = 
 /**
  * Reload the interactive session's plugin runtime: invalidate fs/plugin-root
  * caches, rediscover skills and file slash commands, reset the capability
- * cache, and reconnect MCP servers (rebinding the session's MCP tools). Shared
- * by `/reload-plugins`'s TUI handler and the `handle`-adapter's `reloadPlugins`
- * hook so both honor the command's documented MCP reload scope (#7189).
+ * cache, reconnect MCP servers (rebinding the session's MCP tools), and
+ * re-import extension modules. Shared by `/reload-plugins`'s TUI handler and
+ * the `handle`-adapter's `reloadPlugins` hook so both honor the command's
+ * documented scope (#7189).
+ *
+ * Extensions are reloaded last. They can register tools and commands, so
+ * re-running them after the skill/command refresh means their registrations
+ * are the ones that survive, matching the precedence at session start.
  */
 async function reloadTuiPluginState(ctx: InteractiveModeContext): Promise<void> {
 	const projectPath = await resolveActiveProjectRegistryPath(ctx.sessionManager.getCwd());
@@ -3179,6 +3184,7 @@ async function reloadTuiPluginState(ctx: InteractiveModeContext): Promise<void> 
 	if (ctx.mcpManager) {
 		await new MCPCommandController(ctx).reloadServers();
 	}
+	await ctx.session.extensionRunner?.reloadExtensions();
 }
 
 /**
