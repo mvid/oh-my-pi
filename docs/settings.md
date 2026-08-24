@@ -707,6 +707,7 @@ For a custom status line, set `statusLine.preset: custom` and configure `statusL
 | Key | Type | Default | Values |
 |---|---|---|---|
 | `settings.autoRestartOnUpdate` | boolean | `false` | When a persisted interactive session's executable is replaced, let the current turn settle, then resume that session with the new executable. Unsaved editor text is retained. |
+| `settings.hotReload` | boolean | `false` | Re-read `config.yml` after an outside edit, before the next turn when idle or at the end of the current turn. |
 
 ### Providers and services
 
