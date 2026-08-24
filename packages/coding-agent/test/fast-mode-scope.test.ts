@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
 import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
-import type { Api, AssistantMessage, Model, ProviderSessionState, ServiceTier } from "@oh-my-pi/pi-ai";
+import type { Api, AssistantMessage, Model, ProviderSessionState, ServiceTier, UsageReport } from "@oh-my-pi/pi-ai";
 import { createMockModel } from "@oh-my-pi/pi-ai/providers/mock";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
@@ -21,6 +21,8 @@ describe("/fast targets the current model's service-tier family", () => {
 	let authStorage: AuthStorage;
 	let session: AgentSession | undefined;
 	let modelRegistry: ModelRegistry;
+	/** Per-case storage for entitlement tests; closed after each test. */
+	let stubbedStorage: AuthStorage | undefined;
 
 	beforeAll(async () => {
 		tempDir = TempDir.createSync("@pi-fast-mode-scope-");
@@ -31,6 +33,8 @@ describe("/fast targets the current model's service-tier family", () => {
 	afterEach(async () => {
 		await session?.dispose();
 		session = undefined;
+		stubbedStorage?.close();
+		stubbedStorage = undefined;
 	});
 
 	afterAll(() => {
@@ -52,17 +56,31 @@ describe("/fast targets the current model's service-tier family", () => {
 		settings = Settings.isolated(),
 		streamFn?: Agent["streamFn"],
 		agentKind?: "main" | "sub",
+		usageReports?: UsageReport[],
 	): Promise<AgentSession> {
 		const agent = new Agent({
 			initialState: { model, systemPrompt: ["Test"], tools: [], messages: [] },
 			streamFn,
 		});
-		authStorage.setRuntimeApiKey(model.provider, "token");
+
+		// Entitlement cases need a storage whose usage-report fetch is stubbed, and a
+		// registry built on that storage so the session reads the stubbed reports. Every
+		// other test keeps the shared beforeAll instances rather than reassigning them,
+		// which would leak the stub into later tests in this file.
+		if (usageReports) {
+			stubbedStorage = await AuthStorage.create(path.join(tempDir.path(), "usage-auth.db"), {
+				fetchUsageReports: async () => usageReports,
+			});
+		}
+		const storage = stubbedStorage ?? authStorage;
+		storage.setRuntimeApiKey(model.provider, "token");
 		session = new AgentSession({
 			agent,
 			sessionManager: SessionManager.inMemory(),
 			settings,
-			modelRegistry,
+			modelRegistry: usageReports
+				? new ModelRegistry(storage, path.join(tempDir.path(), "usage-models.yml"))
+				: modelRegistry,
 			agentKind,
 		});
 		session.subscribe(() => {});
@@ -405,6 +423,158 @@ describe("/fast targets the current model's service-tier family", () => {
 			// The lease is per-request, so the family map stays untouched and every
 			// other model keeps its own lease.
 			expect(session.serviceTierByFamily).toEqual({});
+		});
+
+		function creditlessReport(): UsageReport {
+			return {
+				provider: "anthropic",
+				fetchedAt: Date.now(),
+				limits: [],
+				priorityEntitlement: { available: false, reason: "usage credits are disabled" },
+			};
+		}
+
+		async function createEntitlementSession(): Promise<{
+			model: Model<Api>;
+			session: AgentSession;
+			sentTiers: Array<ServiceTier | undefined>;
+		}> {
+			const model = getBundledModel("anthropic", "claude-sonnet-4-5");
+			if (!model) throw new Error("Expected bundled claude-sonnet-4-5 model to exist");
+			const mock = createMockModel({ responses: [{ content: ["Done"] }, { content: ["Done"] }] });
+			const sentTiers: Array<ServiceTier | undefined> = [];
+			const session = await createSessionForModel(
+				model,
+				Settings.isolated({
+					"tier.autoFastMode": true,
+					"tier.autoFastModeDurationMinutes": 20,
+					"compaction.enabled": false,
+				}),
+				(streamModel, context, options) => {
+					sentTiers.push(options?.serviceTier);
+					return mock.stream(streamModel, context, options);
+				},
+				undefined,
+				[creditlessReport()],
+			);
+			// The status-line poll is what populates the entitlement snapshot.
+			await session.fetchUsageReports();
+			return { model, session, sentTiers };
+		}
+
+		it("skips the auto lease when the account cannot use priority", async () => {
+			const { session, sentTiers } = await createEntitlementSession();
+
+			await session.prompt("Respond now");
+			await session.waitForIdle();
+
+			expect(sentTiers).toEqual([undefined]);
+			// Intent is still on, so the state reports blocked (red icon) rather
+			// than off, which would read as "nobody asked for priority".
+			expect(session.fastModeState()).toBe("blocked");
+			expect(session.isFastModeActive()).toBe(false);
+		});
+
+		it("keeps the auto lease on another family after falling back off a blocked one", async () => {
+			// Anthropic reports the entitlement per account, so it must not leak onto
+			// the OpenAI-family model a fallback chain lands on.
+			const model = getBundledModel("openai-codex", "gpt-5.6-terra");
+			if (!model) throw new Error("Expected bundled gpt-5.6-terra model to exist");
+			const mock = createMockModel({ responses: [{ content: ["Done"] }] });
+			const sentTiers: Array<ServiceTier | undefined> = [];
+			const session = await createSessionForModel(
+				model,
+				Settings.isolated({
+					"tier.autoFastMode": true,
+					"tier.autoFastModeDurationMinutes": 20,
+					"compaction.enabled": false,
+				}),
+				(streamModel, context, options) => {
+					sentTiers.push(options?.serviceTier);
+					return mock.stream(streamModel, context, options);
+				},
+				undefined,
+				[creditlessReport()],
+			);
+			await session.fetchUsageReports();
+
+			await session.prompt("Respond now");
+			await session.waitForIdle();
+
+			expect(sentTiers).toEqual(["priority"]);
+			expect(session.fastModeState()).toBe("active");
+		});
+
+		it("still attempts priority on an explicit /fast on, with a warning", async () => {
+			const { session, sentTiers } = await createEntitlementSession();
+			const notices: string[] = [];
+			session.subscribe(event => {
+				if (event.type === "notice" && event.source === "priority") notices.push(event.message);
+			});
+
+			expect(session.setFastMode(true)).toBe(true);
+			await session.prompt("Respond now");
+			await session.waitForIdle();
+
+			expect(sentTiers).toEqual(["priority"]);
+			expect(notices).toEqual([
+				"Fast mode enabled, but usage credits are disabled; expect the provider to refuse it.",
+			]);
+		});
+
+		it("clears the blocked state once the provider serves priority again", async () => {
+			const model = getBundledModel("openai", "gpt-5.2");
+			if (!model) throw new Error("Expected bundled gpt-5.2 model to exist");
+			// First turn is downgraded (OpenAI echoes a lower `service_tier`), second
+			// is served at priority.
+			let downgrade = true;
+			const session = await createSessionForModel(
+				model,
+				Settings.isolated({
+					"tier.autoFastMode": true,
+					"tier.autoFastModeDurationMinutes": 20,
+					"compaction.enabled": false,
+				}),
+				streamModel => {
+					const stream = new AssistantMessageEventStream();
+					const disabledFeatures = downgrade ? ["priority"] : undefined;
+					downgrade = false;
+					queueMicrotask(() => {
+						const message: AssistantMessage = {
+							role: "assistant",
+							content: [{ type: "text", text: "Done" }],
+							api: streamModel.api,
+							provider: streamModel.provider,
+							model: streamModel.id,
+							usage: {
+								input: 0,
+								output: 0,
+								cacheRead: 0,
+								cacheWrite: 0,
+								totalTokens: 0,
+								cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+							},
+							stopReason: "stop",
+							...(disabledFeatures ? { disabledFeatures } : {}),
+							timestamp: Date.now(),
+						};
+						stream.push({ type: "start", partial: message });
+						stream.push({ type: "text_start", contentIndex: 0, partial: message });
+						stream.push({ type: "text_delta", contentIndex: 0, delta: "Done", partial: message });
+						stream.push({ type: "text_end", contentIndex: 0, content: "Done", partial: message });
+						stream.push({ type: "done", reason: "stop", message });
+					});
+					return stream;
+				},
+			);
+
+			await session.prompt("First prompt");
+			await session.waitForIdle();
+			expect(session.fastModeState()).toBe("blocked");
+
+			await session.prompt("Second prompt");
+			await session.waitForIdle();
+			expect(session.fastModeState()).toBe("active");
 		});
 	});
 });
