@@ -26,6 +26,7 @@ import type { PromptTemplate } from "../config/prompt-templates";
 import type { Settings, SkillsSettings } from "../config/settings";
 import type { CursorMcpResourceAdapter } from "../cursor";
 import type { RawSseDebugBuffer } from "../debug/raw-sse-buffer";
+import type { EvalSpeculationStore } from "../eval/speculation";
 import type { TtsrManager } from "../export/ttsr";
 import type { LoadedCustomCommand } from "../extensibility/custom-commands";
 import type { ExtensionRunner } from "../extensibility/extensions";
@@ -142,6 +143,12 @@ export interface AgentSessionConfig {
 	agent: Agent;
 	/** Shared with the provider stream wrapper: current Codex Code Mode tool exposure snapshot for turn metadata. */
 	codeModeState?: { namespacesInfo?: unknown };
+	/**
+	 * Speculative eval tool-call store. Owned by the caller because launching a
+	 * speculation needs a `ToolSession`, which this session is not. Omitted
+	 * leaves speculation off for the session.
+	 */
+	evalSpeculation?: EvalSpeculationStore;
 	sessionManager: SessionManager;
 	settings: Settings;
 	/** Whether the session spawn policy permits the read-only `scout` subagent. Defaults to true. */

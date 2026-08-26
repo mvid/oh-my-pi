@@ -81,11 +81,13 @@ import { createImageUrlServiceFromSettings } from "./blob-broker/service";
 import { wrapStreamFnWithBlobUrlFallback } from "./blob-broker/stream-fallback";
 import { initializeWithSettings } from "./discovery";
 import { withOmpExtensionRootScope } from "./discovery/omp-extension-roots";
+import { EVAL_COMPLETION_BRIDGE_NAME, runEvalCompletion } from "./eval/completion-bridge";
 import { disposeAllJuliaKernelSessions, disposeJuliaKernelSessionsByOwner } from "./eval/jl/executor";
 import { disposeVmContextsByOwner } from "./eval/js/context-manager";
 import { disposeAllKernelSessions, disposeKernelSessionsByOwner } from "./eval/py/executor";
 import { disposeAllRubyKernelSessions, disposeRubyKernelSessionsByOwner } from "./eval/rb/executor";
 import { defaultEvalSessionId } from "./eval/session-id";
+import { EvalSpeculationStore, registerEvalSpeculation } from "./eval/speculation";
 import {
 	type CustomCommandsLoadResult,
 	type LoadedCustomCommand,
@@ -1859,6 +1861,21 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 			asyncJobManager: scopedAsyncJobManager,
 		};
 
+		// Speculative programmatic tool calling: launched from partial eval source
+		// while the model streams, claimed by the eval bridge when the cell runs.
+		// Built here because it needs the tool session to dispatch through, and
+		// bound by weak identity so the bridge can find it without widening
+		// `ToolSession` (see `eval/speculation.ts`).
+		const evalSpeculation = new EvalSpeculationStore({
+			isEnabled: () => settings.get("eval.speculation.enabled"),
+			maxPerTurn: () => settings.get("eval.speculation.maxPerTurn"),
+			run: (name, args, signal) =>
+				name === EVAL_COMPLETION_BRIDGE_NAME
+					? runEvalCompletion(args, { session: toolSession, signal })
+					: Promise.reject(new Error(`not speculatable: ${name}`)),
+		});
+		registerEvalSpeculation(toolSession, evalSpeculation);
+
 		// Wire process-wide internal URL singletons owned by their real classes.
 		// Top-level sessions install the active snapshots; subagents inherit them.
 		// Artifact and agent-output URLs resolve via `AgentRegistry.global()` —
@@ -3545,6 +3562,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 		const initialAdvisorCosts = await loadAdvisorTranscriptCosts(sessionManager.getSessionFile());
 		session = new AgentSession({
 			codeModeState,
+			evalSpeculation,
 			advisorWatchdogPrompt,
 			advisorContextPrompt,
 			advisorSharedInstructions: discoveredAdvisors.sharedInstructions,
