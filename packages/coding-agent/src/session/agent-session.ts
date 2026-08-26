@@ -820,8 +820,8 @@ export class AgentSession {
 
 	readonly #streamingEditGuard: StreamingEditGuard;
 	readonly #loopGuards: LoopGuards;
-	/** Speculations launched from partial eval source; created on first streamed eval call. */
-	#evalSpeculation: EvalSpeculationStore | undefined;
+	/** Speculations launched from partial eval source. Injected; undefined leaves speculation off. */
+	readonly #evalSpeculation: EvalSpeculationStore | undefined;
 	#promptInFlightCount = 0;
 	#abortInProgress = false;
 	/** Submissions accepted by prompt()/promptCustomMessage()/sendCustomMessage() that have not
