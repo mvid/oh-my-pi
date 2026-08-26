@@ -122,8 +122,12 @@ import { releaseCompletionHandles } from "../eval/completion-bridge";
 import { releaseJudgmentBatches } from "../eval/judgment-batch-bridge";
 import type { EvalPreludeDefinition } from "../eval/preludes";
 import type { PythonResult } from "../eval/py/executor";
+<<<<<<< HEAD
 import { WorkPoolRegistry } from "../task/workpool";
 import type { EvalSpeculationStore } from "../eval/speculation";
+=======
+import { type EvalSpeculationStore, streamedEvalCell } from "../eval/speculation";
+>>>>>>> b6e3275d3f (test(eval): cover the streamed-event shape the speculator depends on)
 import type { BashPtyOptions, BashResult } from "../exec/bash-executor";
 import type { TtsrManager } from "../export/ttsr";
 import type { LoadedCustomCommand } from "../extensibility/custom-commands";
@@ -1783,17 +1787,12 @@ export class AgentSession {
 			});
 		}
 		this.agent.setAssistantMessageEventInterceptor((message, assistantMessageEvent) => {
-<<<<<<< HEAD
-=======
 			const event: AgentEvent = {
 				type: "message_update",
 				message,
 				assistantMessageEvent,
 			};
-			this.#streamingEditGuard.preCache(event);
-			this.#streamingEditGuard.maybeAbort(event);
 			this.#observeEvalSpeculation(event);
->>>>>>> 15e0776ac6 (feat(eval): speculative programmatic tool calling for literal completions)
 			this.#loopGuards.onAssistantEvent(message, assistantMessageEvent);
 		});
 		// Tool-result hook owns synchronous post-tool actions that must affect the current loop.
@@ -5549,10 +5548,6 @@ export class AgentSession {
 	/**
 	 * Launch speculatable calls found in a streamed eval cell.
 	 *
-	 * Mirrors {@link StreamingEditGuard}'s access pattern: the provider fills
-	 * `toolCall.arguments` progressively as the JSON arrives, so a partially
-	 * written cell is readable here well before the tool runs.
-	 *
 	 * The store is supplied by the session's owner rather than built here: it
 	 * needs a `ToolSession` to dispatch through, which this class is not, and
 	 * importing the completion bridge for one call would pull an omptype-heavy
@@ -5561,27 +5556,8 @@ export class AgentSession {
 	#observeEvalSpeculation(event: AgentEvent): void {
 		const speculation = this.#evalSpeculation;
 		if (!speculation) return;
-		if (event.type !== "message_update" || event.message.role !== "assistant") return;
-		const assistantEvent = event.assistantMessageEvent;
-		if (
-			assistantEvent.type !== "toolcall_start" &&
-			assistantEvent.type !== "toolcall_delta" &&
-			assistantEvent.type !== "toolcall_end"
-		) {
-			return;
-		}
-		const contentIndex = assistantEvent.contentIndex ?? 0;
-		const content = event.message.content;
-		if (!Array.isArray(content) || contentIndex < 0 || contentIndex >= content.length) return;
-		const toolCall = content[contentIndex] as ToolCall;
-		if (toolCall.name !== "eval") return;
-		const args = toolCall.arguments;
-		if (!args || typeof args !== "object" || Array.isArray(args)) return;
-		const language = args.language;
-		const code = args.code;
-		// Only the two runtimes whose comment and string syntax the scanner models.
-		if ((language !== "js" && language !== "py") || typeof code !== "string") return;
-		speculation.observe(code, language);
+		const cell = streamedEvalCell(event);
+		if (cell) speculation.observe(cell.code, cell.language);
 	}
 
 	/** Selects enabled tools, ignoring names absent from the registry. */
