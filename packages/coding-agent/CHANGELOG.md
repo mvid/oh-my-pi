@@ -41,6 +41,9 @@
 - Wayland keyboard input now follows the compositor's active XKB layout instead of assuming a US layout.
 - LSP diagnostics now refresh when watched files are created or deleted and after a server reload.
 - Compiled bytecode binaries now start correctly when bundled dependencies use `import.meta.resolve`.
+### Changed
+
+- Coding agents now distinguish greenfield and established compatibility contracts, defaulting undeclared projects and scopes to preserving existing behavior.
 
 ### Fixed
 
