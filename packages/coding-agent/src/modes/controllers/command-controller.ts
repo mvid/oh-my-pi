@@ -58,6 +58,7 @@ import {
 import { copyToClipboard } from "../../utils/clipboard";
 import { openPath } from "../../utils/open";
 import { setSessionTerminalTitle } from "../../utils/title-generator";
+import { filterUsageReportsForDisplay } from "../../utils/usage-display";
 
 function showMarkdownPanel(ctx: InteractiveModeContext, title: string, markdown: string): void {
 	const block = new TranscriptBlock();
@@ -601,14 +602,17 @@ export class CommandController {
 					this.ctx.session.sessionId,
 				)
 			: undefined;
+		const displayReports = filterUsageReportsForDisplay(usageReports, {
+			showZeroUsageMeters: this.ctx.settings.get("display.showZeroUsageMeters"),
+		});
 		// `display.showUsageModels` (default on) opts out of the per-provider model list.
 		// Skipping the registry walk here is cheaper than filtering it away in the renderer.
 		const usageModelSelectors =
 			this.ctx.settings.get("display.showUsageModels") === false
 				? []
-				: this.ctx.session.getUsageReportingModelSelectors(usageReports);
+				: this.ctx.session.getUsageReportingModelSelectors(displayReports);
 		const output = renderUsageReports(
-			usageReports,
+			displayReports,
 			theme,
 			Date.now(),
 			availableWidth,
