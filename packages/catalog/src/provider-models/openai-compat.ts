@@ -4409,6 +4409,9 @@ const BEDROCK_MANTLE_GPT_5_6_THINKING: ThinkingConfig = {
 /**
  * OpenAI frontier models served exclusively through Bedrock Mantle's Responses
  * endpoint. Pricing is per million tokens from the Amazon Bedrock pricing page.
+ *
+ * GPT-5.6 Sol, Terra, and Luna use AWS's documented 1M window; GPT-5.4 and
+ * GPT-5.5 retain their documented 272K windows.
  */
 export const BEDROCK_MANTLE_STATIC_MODELS: readonly ModelSpec<"openai-responses">[] = [
 	{
@@ -4446,7 +4449,7 @@ export const BEDROCK_MANTLE_STATIC_MODELS: readonly ModelSpec<"openai-responses"
 		reasoning: true,
 		input: ["text", "image"],
 		cost: { input: 0.22, output: 1.32, cacheRead: 0.022, cacheWrite: 0.275 },
-		contextWindow: 272_000,
+		contextWindow: 1_000_000,
 		maxTokens: 128_000,
 		thinking: BEDROCK_MANTLE_GPT_5_6_THINKING,
 	},
@@ -4459,7 +4462,7 @@ export const BEDROCK_MANTLE_STATIC_MODELS: readonly ModelSpec<"openai-responses"
 		reasoning: true,
 		input: ["text", "image"],
 		cost: { input: 5.5, output: 33, cacheRead: 0.55, cacheWrite: 6.88 },
-		contextWindow: 272_000,
+		contextWindow: 1_000_000,
 		maxTokens: 128_000,
 		thinking: BEDROCK_MANTLE_GPT_5_6_THINKING,
 	},
@@ -4472,7 +4475,7 @@ export const BEDROCK_MANTLE_STATIC_MODELS: readonly ModelSpec<"openai-responses"
 		reasoning: true,
 		input: ["text", "image"],
 		cost: { input: 2.2, output: 13.2, cacheRead: 0.22, cacheWrite: 2.75 },
-		contextWindow: 272_000,
+		contextWindow: 1_000_000,
 		maxTokens: 128_000,
 		thinking: BEDROCK_MANTLE_GPT_5_6_THINKING,
 	},

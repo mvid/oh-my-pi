@@ -7181,7 +7181,22 @@
 				}
 			},
 			{
-				"source": "providers/cursor.kdl:20",
+				"source": "providers/cursor.kdl:19",
+				"providers": [
+					"cursor"
+				],
+				"models": [
+					{
+						"kind": "glob",
+						"value": "gpt-5.6*"
+					}
+				],
+				"catalog": {
+					"contextWindowFloor": 1000000
+				}
+			},
+			{
+				"source": "providers/cursor.kdl:24",
 				"providers": [
 					"cursor"
 				],
@@ -7215,7 +7230,7 @@
 				}
 			},
 			{
-				"source": "providers/cursor.kdl:23",
+				"source": "providers/cursor.kdl:27",
 				"providers": [
 					"cursor"
 				],
@@ -7249,7 +7264,7 @@
 				}
 			},
 			{
-				"source": "providers/cursor.kdl:27",
+				"source": "providers/cursor.kdl:31",
 				"providers": [
 					"cursor"
 				],
@@ -7267,7 +7282,7 @@
 				}
 			},
 			{
-				"source": "providers/cursor.kdl:31",
+				"source": "providers/cursor.kdl:35",
 				"providers": [
 					"cursor"
 				],
@@ -7300,7 +7315,7 @@
 				}
 			},
 			{
-				"source": "providers/cursor.kdl:35",
+				"source": "providers/cursor.kdl:39",
 				"providers": [
 					"cursor"
 				],
@@ -7340,7 +7355,7 @@
 				}
 			},
 			{
-				"source": "providers/cursor.kdl:40",
+				"source": "providers/cursor.kdl:44",
 				"providers": [
 					"cursor"
 				],
@@ -7359,7 +7374,7 @@
 				}
 			},
 			{
-				"source": "providers/cursor.kdl:44",
+				"source": "providers/cursor.kdl:48",
 				"providers": [
 					"cursor"
 				],

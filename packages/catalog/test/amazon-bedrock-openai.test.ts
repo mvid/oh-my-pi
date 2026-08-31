@@ -61,6 +61,15 @@ describe("Amazon Bedrock OpenAI routing", () => {
 		});
 	});
 
+	test("serves the GPT-5.6 tiers at their 1M Bedrock window", () => {
+		const byId = Object.fromEntries(BEDROCK_MANTLE_STATIC_MODELS.map(model => [model.id, model]));
+		expect(byId["openai.gpt-5.6-luna"]?.contextWindow).toBe(1_000_000);
+		expect(byId["openai.gpt-5.6-sol"]?.contextWindow).toBe(1_000_000);
+		expect(byId["openai.gpt-5.6-terra"]?.contextWindow).toBe(1_000_000);
+		expect(byId["openai.gpt-5.4"]?.contextWindow).toBe(272_000);
+		expect(byId["openai.gpt-5.5"]?.contextWindow).toBe(272_000);
+	});
+
 	test("account-scoped discovery is authoritative over the static seed", async () => {
 		let requestedUrl = "";
 		const fetchImpl: FetchImpl = Object.assign(

@@ -294,6 +294,33 @@ describe("fetchCursorUsableModels", () => {
 		]);
 	});
 
+	it("floors the GPT-5.6 family at 1M including the unlabeled fast lanes", async () => {
+		const response = create(GetUsableModelsResponseSchema, {
+			models: [
+				create(ModelDetailsSchema, { modelId: "gpt-5.6-sol", displayName: "GPT-5.6 Sol" }),
+				create(ModelDetailsSchema, { modelId: "gpt-5.6-sol-fast", displayName: "GPT-5.6 Sol Fast" }),
+				create(ModelDetailsSchema, { modelId: "gpt-5.6-luna-fast", displayName: "GPT-5.6 Luna Fast" }),
+				create(ModelDetailsSchema, { modelId: "gpt-5.6-terra-fast", displayName: "GPT-5.6 Terra Fast" }),
+			],
+		});
+		const fastBaseUrl = await startCursorDiscoveryServer(toBinary(GetUsableModelsResponseSchema, response));
+
+		const models = await fetchCursorUsableModels({ apiKey: "test-token", baseUrl: fastBaseUrl, timeoutMs: 1_000 });
+
+		const discovered = Object.fromEntries((models ?? []).map(model => [model.id, model.contextWindow]));
+		expect(discovered["gpt-5.6-sol-fast"]).toBe(200_000);
+		expect(discovered["gpt-5.6-luna-fast"]).toBe(200_000);
+		expect(discovered["gpt-5.6-terra-fast"]).toBe(200_000);
+
+		const built = Object.fromEntries((models ?? []).map(model => [model.id, buildModel(model).contextWindow]));
+		expect(built).toEqual({
+			"gpt-5.6-sol": 1_000_000,
+			"gpt-5.6-sol-fast": 1_000_000,
+			"gpt-5.6-luna-fast": 1_000_000,
+			"gpt-5.6-terra-fast": 1_000_000,
+		});
+	});
+
 	it("keeps the default window below the GLM 5.2 floor and outside the coding variants", async () => {
 		const response = create(GetUsableModelsResponseSchema, {
 			models: [
