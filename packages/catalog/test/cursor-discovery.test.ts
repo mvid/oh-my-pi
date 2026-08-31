@@ -334,7 +334,7 @@ describe("fetchCursorUsableModels", () => {
 			expect.objectContaining({ id: "cursor-grok-4.5", contextWindow: 256_000 }),
 			expect.objectContaining({ id: "cursor-grok-4.6", contextWindow: 256_000 }),
 			expect.objectContaining({ id: "default", contextWindow: 256_000 }),
-			expect.objectContaining({ id: "gpt-5.6-sol-fast", contextWindow: 272_000 }),
+			expect.objectContaining({ id: "gpt-5.6-sol-fast", contextWindow: 1_000_000 }),
 			expect.objectContaining({ id: "gpt-5.6-sol-medium", contextWindow: 1_000_000 }),
 			expect.objectContaining({ id: "kimi-k2.7-code", contextWindow: 262_000 }),
 		]);
