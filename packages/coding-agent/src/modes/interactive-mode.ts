@@ -122,7 +122,7 @@ import type { ShakeMode } from "../session/shake-types";
 import { BUILTIN_SLASH_COMMAND_RESERVED_NAMES, buildTuiBuiltinSlashCommands } from "../slash-commands/builtin-registry";
 import { formatDuration } from "../slash-commands/helpers/format";
 import { STTController, type SttState } from "../stt";
-import { resolveCliEntryCmd } from "../subprocess/worker-client";
+import { resolveRestartCmd } from "../subprocess/worker-client";
 import { discoverTitleSystemPromptFile, resolvePromptInput } from "../system-prompt";
 import { labelEchoesHandle } from "../task/label";
 import { agentTypeBadge, formatTaskId } from "../task/render";
@@ -1750,7 +1750,6 @@ export class InteractiveMode implements InteractiveModeContext {
 		using _ = new EventLoopKeepalive();
 		return await promise;
 	}
-
 	/** Wake the main input loop so a completed executable update can hand off safely. */
 	interruptIdleInputForAutoRestart(): void {
 		this.onInputCallback?.({ text: "", cancelled: true, started: false });
@@ -5229,7 +5228,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#isShuttingDown = true;
 		await this.#teardown();
 
-		const cmd = [...resolveCliEntryCmd(), ...restartArgv(process.argv.slice(2), this.#resumableSessionId())];
+		const cmd = [...resolveRestartCmd(), ...restartArgv(process.argv.slice(2), this.#resumableSessionId())];
 		await postmortem.cleanup();
 		await postmortem.drainStdout();
 		if (process.platform !== "win32") {
