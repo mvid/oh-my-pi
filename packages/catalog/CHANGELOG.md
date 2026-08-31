@@ -7,6 +7,11 @@
 - Sped up model cache reads from `models.db` (~6× faster for large rows) ([#14676](https://github.com/can1357/oh-my-pi/pull/14676) by [@H4vC](https://github.com/H4vC))
 - Sped up repeated catalog-wide model builds (~88→38 ms) ([#14676](https://github.com/can1357/oh-my-pi/pull/14676) by [@H4vC](https://github.com/H4vC))
 
+### Fixed
+
+- GPT-5.6 Sol, Terra, and Luna now use their 1M context windows on Bedrock Mantle.
+- Cursor GPT-5.6 fast lanes now use the documented 1M context window.
+
 ## [18.7.0] - 2026-10-06
 
 ### Added
