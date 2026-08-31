@@ -28,7 +28,7 @@ provider "bedrock-mantle" {
 			reasoning #true
 			input "text" "image"
 			cost input=0.22 output=1.32 cache-read=0.022 cache-write=0.275
-			limits context=272000 max-tokens=128000
+			limits context=1000000 max-tokens=128000
 			thinking-mode "effort"
 			thinking-efforts "low" "medium" "high" "xhigh" "max"
 		}
@@ -36,7 +36,7 @@ provider "bedrock-mantle" {
 			reasoning #true
 			input "text" "image"
 			cost input=5.5 output=33 cache-read=0.55 cache-write=6.88
-			limits context=272000 max-tokens=128000
+			limits context=1000000 max-tokens=128000
 			thinking-mode "effort"
 			thinking-efforts "low" "medium" "high" "xhigh" "max"
 		}
@@ -44,7 +44,7 @@ provider "bedrock-mantle" {
 			reasoning #true
 			input "text" "image"
 			cost input=2.2 output=13.2 cache-read=0.22 cache-write=2.75
-			limits context=272000 max-tokens=128000
+			limits context=1000000 max-tokens=128000
 			thinking-mode "effort"
 			thinking-efforts "low" "medium" "high" "xhigh" "max"
 		}

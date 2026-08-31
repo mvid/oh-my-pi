@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- GPT-5.6 Sol, Terra, and Luna now use their 1M context windows on Bedrock Mantle.
+- Cursor GPT-5.6 fast lanes now use the documented 1M context window.
+
 ## [18.8.3] - 2026-10-07
 
 ### Added
