@@ -5,7 +5,7 @@
 ### Added
 
 - Files the write tool creates now preview the way the matching code blocks in replies do, building up while the write streams: `.svg` as an image and Mermaid (`.mmd`, `.mermaid`) as a diagram under the write card, and in Tern also 3D models (`.obj`, `.ply`, `.wrl`, `.x3dv`, `.stl`, `.gltf`, `.usda`); in Tern an SVG write now draws like an SVG figure in a reply
-- Added a `display.showZeroUsageMeters` setting to hide untouched supplemental model and tier quota meters from live usage reports.
+- Added a `display.showZeroUsageMeters` setting to hide untouched supplemental model and tier quota meters from live usage reports ([#10423](https://github.com/can1357/oh-my-pi/pull/10423) by [@mvid](https://github.com/mvid)).
 
 ### Changed
 
