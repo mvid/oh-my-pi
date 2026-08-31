@@ -33,6 +33,15 @@
 - Added OpenRouter image-model discovery and live TypeSafe judge-model discovery.
 - Added the `buildDiscoveredModel` helper for defining custom providers.
 - Added glob-based patterns for identity overrides.
+- Model-id revision parsing no longer mistakes parameter-count tokens for versions (`qwen3-32b` is generation 3, not 3.32), Fireworks' `p`-spelled Kimi ids classify as K2.6 (restoring their widened reasoning stream timeout), and Kimi K3's `reasoning_effort` remap now applies on any OpenAI-compatible host (LiteLLM, vLLM) instead of only census-listed providers.
+- Cursor's wrapped per-tier Grok ids (`cursor-grok-4.5`, `cursor-grok-4.6-high`) now carry structured xAI identity with a parsed revision, so revision-gated behavior (reasoning classification, thinking-loop guard) applies to them like any other Grok deployment.
+- Codex Daybreak aliases keep their standard API list price through the rule tree (`cost-patch`) instead of a TypeScript pricing table, covering the `-wm` worker siblings that the old exact-id switch missed.
+- Local Ollama models resolve the runtime's low/medium/high/max effort ladder from rules, DeepSeek V4 base ids carry the wire-exact low/high/max ladder, and Bedrock Nova explicit prompt-cache checkpoints apply only to the AWS-documented `v1:0` deployments.
+- Fixed native Devin families with independent Thinking and 1M Context axes losing wire variants or advertising the wrong context window; each context lane now preserves its complete off/effort routing and server-selected default ([#8590](https://github.com/can1357/oh-my-pi/pull/8590) by [@will-bogusz](https://github.com/will-bogusz)).
+- Stripped the image modality from Devin's `swe-1-6`/`swe-1-6-fast`: their configs advertise `supports_images` but the backend silently drops inline images (verified live against every other Cascade model), so clients now engage their text-only image fallback instead of losing attachments ([#6072](https://github.com/can1357/oh-my-pi/issues/6072)).
+- Devin discovery now logs a warning when the backend returns an empty native catalog, the failure signature of a stale pinned CLI identity ([#8590](https://github.com/can1357/oh-my-pi/pull/8590) by [@will-bogusz](https://github.com/will-bogusz)).
+- GPT-5.6 Sol, Terra, and Luna now use their 1M context windows on Bedrock Mantle.
+- Cursor GPT-5.6 fast lanes now use the documented 1M context window.
 
 ### Changed
 
