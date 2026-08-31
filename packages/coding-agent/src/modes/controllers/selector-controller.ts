@@ -1,3 +1,4 @@
+import { cfgDisplayShowZeroUsageMeters } from "../settings";
 import { type AgentMessage, type AgentToolResult, ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { CompactionOutcome } from "@oh-my-pi/pi-agent-core/compaction";
 import type { Model, PASTE_CODE_LOGIN_PROVIDERS as PasteCodeLoginProviders, UsageReport } from "@oh-my-pi/pi-ai";
@@ -89,6 +90,7 @@ import { type AdvisorConfigDeps, AdvisorConfigOverlayComponent } from "@oh-my-pi
 import { createAgentsHubDeps } from "../agents-hub-deps";
 import { getEditorCommand, openInEditor } from "../../utils/external-editor";
 import { collapseSharedUsageReports } from "@oh-my-pi/pi-tui/overlays/usage-display";
+import { filterUsageReportsForDisplay } from "../../utils/usage-display";
 import { limitMatchesActiveAccount } from "../../slash-commands/helpers/active-oauth-account";
 import { AgentHubOverlayComponent } from "@oh-my-pi/pi-tui/overlays/agent-hub";
 import { createAgentHubRuntime } from "../agent-hub-runtime";
@@ -362,18 +364,21 @@ export class SelectorController {
 		const activeAccount = currentProvider
 			? this.ctx.session.modelRegistry.authStorage.oauth.identity(currentProvider, this.ctx.session.sessionId)
 			: undefined;
-		const usageModelSelectors = this.ctx.session.getUsageReportingModelSelectors(reports);
+		const displayReports = filterUsageReportsForDisplay(collapseSharedUsageReports(reports), {
+			showZeroUsageMeters: cfgDisplayShowZeroUsageMeters.get(this.ctx.settings),
+		});
+		const usageModelSelectors = this.ctx.session.getUsageReportingModelSelectors(displayReports);
 		const done = () => {
 			overlayHandle?.hide();
 			this.focusActiveEditorArea();
 			this.ctx.ui.requestRender();
 		};
 		const dashboard = new UsageDashboardComponent({
-			reports,
+			reports: displayReports,
 			unavailableAccounts,
 			renderDetail: width =>
 				renderUsageReports(
-					reports,
+					displayReports,
 					theme,
 					Date.now(),
 					width,
