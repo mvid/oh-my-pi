@@ -1,4 +1,5 @@
 import { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
+import type { Model } from "@oh-my-pi/pi-ai";
 import { parseConfiguredThinkingLevel, parseThinkingLevel } from "../thinking";
 import {
 	PANEL_MAX_MEMBERS,
@@ -25,6 +26,11 @@ export class PanelConfigError extends Error {
 		super(`${path}: ${message}`);
 		this.name = "PanelConfigError";
 	}
+}
+
+/** Resolve the coarse lineage used for independent-panel diversity. */
+export function resolvePanelModelFamily(model: Pick<Model, "identity">): string {
+	return model.identity.class === "unknown" ? "" : model.identity.class;
 }
 
 /** Key names rejected on every parsed record, regardless of shape, to keep prototype-pollution vectors out of static config. */

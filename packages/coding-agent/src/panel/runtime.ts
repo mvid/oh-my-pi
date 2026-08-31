@@ -1,6 +1,5 @@
 import { ThinkingLevel } from "@oh-my-pi/pi-agent-core";
 import type { Effort, Model } from "@oh-my-pi/pi-ai";
-import { modelFamilyToken } from "@oh-my-pi/pi-catalog/identity";
 import { getSupportedEfforts } from "@oh-my-pi/pi-catalog/model-thinking";
 import {
 	extractExplicitThinkingSelector,
@@ -16,6 +15,7 @@ import { createPanelPersonaAgent, PANEL_INDEPENDENT_AGENT } from "./agents";
 import {
 	PanelConfigError,
 	parsePanelSettings,
+	resolvePanelModelFamily,
 	resolvePanelPersona,
 	resolvePanelRole,
 	validateResolvedPanelRole,
@@ -170,7 +170,7 @@ function resolveMembers(options: { session: ToolSession; role: ResolvedPanelRole
 			index,
 			selector: formatModelStringWithRouting(model),
 			modelId: model.id,
-			family: modelFamilyToken(model.id),
+			family: resolvePanelModelFamily(model),
 			...(thinking === undefined || thinking === ThinkingLevel.Inherit ? {} : { thinking }),
 		};
 	});
