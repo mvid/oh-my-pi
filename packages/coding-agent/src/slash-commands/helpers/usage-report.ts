@@ -4,14 +4,7 @@ import type { OAuthAccountIdentity } from "../../session/auth-storage";
 import { filterUsageReportsForDisplay } from "../../utils/usage-display";
 import type { SlashCommandRuntime } from "../types";
 import { reportMatchesActiveAccount } from "./active-oauth-account";
-import { formatDuration, renderAsciiBar } from "./format";
-
-function formatProviderName(provider: string): string {
-	return provider
-		.split(/[-_]/g)
-		.map(part => (part ? part[0].toUpperCase() + part.slice(1) : ""))
-		.join(" ");
-}
+import { formatDuration, formatProviderName, renderAsciiBar } from "./format";
 
 function formatWindowSuffix(label: string, windowLabel: string | undefined): string {
 	if (!windowLabel) return "";

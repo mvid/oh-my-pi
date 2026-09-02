@@ -244,6 +244,13 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 					}
 				} else if (block.type === "toolCall") {
 					emittedToolCallNames.set(block.id, block.name);
+					// Gemini 3 requires a thought signature on function calls it makes. For
+					// calls we cannot sign (cross-model replay, secret-redacted args, or the
+					// secondary calls of a parallel turn), the public Gemini API accepts the
+					// `skip_thought_signature_validator` sentinel as a bypass. Cloud Code
+					// Assist / Antigravity and Vertex AI reject that sentinel with 400
+					// INVALID_ARGUMENT — permanently wedging any session whose history
+					// contains one — so for those transports we omit the field instead. (#9638)
 					const thoughtSignature = resolveThoughtSignature(isSameProviderAndModel, block.thoughtSignature);
 					const effectiveSignature =
 						thoughtSignature || (model.compat.requiresSkipThoughtSignature ? SKIP_THOUGHT_SIGNATURE : undefined);
@@ -255,9 +262,6 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 							...(model.compat.supportsFunctionPartId ? { id: block.id } : {}),
 						},
 					};
-					if (model.provider === "google-vertex" && part?.functionCall?.id) {
-						delete part.functionCall.id; // Vertex AI GenerateContent rejects 'id' in functionCall parts.
-					}
 					if (effectiveSignature) {
 						part.thoughtSignature = effectiveSignature;
 					}
@@ -307,10 +311,6 @@ export function convertMessages<T extends GoogleApiType>(model: Model<T>, contex
 					...(includeId ? { id: msg.toolCallId } : {}),
 				},
 			};
-
-			if (model.provider === "google-vertex" && functionResponsePart.functionResponse?.id) {
-				delete functionResponsePart.functionResponse.id; // Vertex AI GenerateContent rejects 'id' in functionResponse parts.
-			}
 
 			// Cloud Code Assist API requires all function responses to be in a single user turn.
 			// Check if the last content is already a user turn with function responses and merge.

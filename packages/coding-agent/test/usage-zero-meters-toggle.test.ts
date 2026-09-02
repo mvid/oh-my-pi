@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it, vi } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
 import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
-import { CommandController } from "@oh-my-pi/pi-coding-agent/modes/controllers/command-controller";
-import { getThemeByName, setThemeInstance } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import { CommandController, renderUsageReports } from "@oh-my-pi/pi-coding-agent/modes/controllers/command-controller";
+import { getThemeByName, setThemeInstance, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { buildUsageReportText } from "@oh-my-pi/pi-coding-agent/slash-commands/helpers/usage-report";
 
@@ -46,12 +46,22 @@ function settingsDouble(showZeroUsageMeters: boolean) {
 	};
 }
 
-interface RenderableBlock {
-	render(width: number): string[];
-}
-
-function isRenderableBlock(value: unknown): value is RenderableBlock {
-	return value !== null && typeof value === "object" && "render" in value && typeof value.render === "function";
+async function buildTuiText(showZeroUsageMeters: boolean, reports = usageReports()): Promise<string> {
+	const showUsageDashboard = vi.fn();
+	const ctx = {
+		settings: settingsDouble(showZeroUsageMeters),
+		session: { getUsageReportingModelSelectors: () => [] },
+		ui: { terminal: { columns: 100 } },
+		showUsageDashboard,
+		showWarning: vi.fn(),
+		showError: vi.fn(),
+	} as unknown as InteractiveModeContext;
+	await new CommandController(ctx).handleUsageCommand(reports);
+	expect(showUsageDashboard).toHaveBeenCalledTimes(1);
+	const [displayed, selectors] = showUsageDashboard.mock.calls[0] as [UsageReport[], string[]];
+	// The overlay renders its detail view through this same public renderer, so
+	// the filtered report set is observable as report text.
+	return stripVTControlCharacters(renderUsageReports(displayed, theme, Date.now(), 120, () => undefined, selectors));
 }
 
 async function buildAcpText(showZeroUsageMeters: boolean, reports = usageReports()): Promise<string> {
@@ -63,25 +73,6 @@ async function buildAcpText(showZeroUsageMeters: boolean, reports = usageReports
 			getUsageReportingModelSelectors: () => [],
 		},
 	} as never);
-}
-
-async function buildTuiText(showZeroUsageMeters: boolean, reports = usageReports()): Promise<string> {
-	const present = vi.fn();
-	const ctx = {
-		settings: settingsDouble(showZeroUsageMeters),
-		session: { getUsageReportingModelSelectors: () => [] },
-		ui: { terminal: { columns: 100 } },
-		presentCommandOutput: present,
-		showWarning: vi.fn(),
-		showError: vi.fn(),
-	} as unknown as InteractiveModeContext;
-	await new CommandController(ctx).handleUsageCommand(reports);
-	const blocks = present.mock.calls[0]?.[0];
-	const rendered = (Array.isArray(blocks) ? blocks : [blocks])
-		.filter(isRenderableBlock)
-		.flatMap(block => block.render(120))
-		.join("\n");
-	return stripVTControlCharacters(rendered);
 }
 
 describe("display.showZeroUsageMeters", () => {

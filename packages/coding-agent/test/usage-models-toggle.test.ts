@@ -6,15 +6,16 @@
  * off must drop the "Models with usage data" heading and its indented selector
  * lines, and change nothing else in the report.
  *
- * Both `/usage` renderers are gated at their call site: the TUI aggregate in
- * `command-controller.ts` and the ACP text builder in `usage-report.ts`.
+ * The ACP text builder in `usage-report.ts` and the TUI `/usage` command in
+ * `command-controller.ts` each gate the model list at their call site; the TUI
+ * side hands the resolved list to the fullscreen dashboard overlay.
  */
 
 import { beforeAll, describe, expect, it, vi } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
 import type { UsageReport } from "@oh-my-pi/pi-ai";
-import { CommandController } from "@oh-my-pi/pi-coding-agent/modes/controllers/command-controller";
-import { getThemeByName, setThemeInstance } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
+import { CommandController, renderUsageReports } from "@oh-my-pi/pi-coding-agent/modes/controllers/command-controller";
+import { getThemeByName, setThemeInstance, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { buildUsageReportText } from "@oh-my-pi/pi-coding-agent/slash-commands/helpers/usage-report";
 
@@ -42,12 +43,22 @@ function usageReport(): UsageReport {
 	};
 }
 
-interface RenderableBlock {
-	render(width: number): string[];
-}
-
-function isRenderableBlock(value: unknown): value is RenderableBlock {
-	return value !== null && typeof value === "object" && "render" in value && typeof value.render === "function";
+async function buildTuiText(showUsageModels: boolean): Promise<string> {
+	const showUsageDashboard = vi.fn();
+	const ctx = {
+		settings: settingsDouble(showUsageModels),
+		session: { getUsageReportingModelSelectors: () => SELECTORS },
+		ui: { terminal: { columns: 100 } },
+		showUsageDashboard,
+		showWarning: vi.fn(),
+		showError: vi.fn(),
+	} as unknown as InteractiveModeContext;
+	await new CommandController(ctx).handleUsageCommand([usageReport()]);
+	expect(showUsageDashboard).toHaveBeenCalledTimes(1);
+	const [reports, selectors] = showUsageDashboard.mock.calls[0] as [UsageReport[], string[]];
+	// The overlay renders its detail view through this same public renderer, so
+	// the resolved selector list is observable as report text.
+	return stripVTControlCharacters(renderUsageReports(reports, theme, Date.now(), 120, () => undefined, selectors));
 }
 
 async function buildAcpText(showUsageModels: boolean): Promise<string> {
@@ -59,27 +70,6 @@ async function buildAcpText(showUsageModels: boolean): Promise<string> {
 			getUsageReportingModelSelectors: () => SELECTORS,
 		},
 	} as never);
-}
-
-async function buildTuiText(showUsageModels: boolean): Promise<string> {
-	const present = vi.fn();
-	const ctx = {
-		settings: settingsDouble(showUsageModels),
-		session: { getUsageReportingModelSelectors: () => SELECTORS },
-		ui: { terminal: { columns: 100 } },
-		present,
-		presentCommandOutput: present,
-		showWarning: vi.fn(),
-		showError: vi.fn(),
-	} as unknown as InteractiveModeContext;
-	await new CommandController(ctx).handleUsageCommand([usageReport()]);
-	expect(present).toHaveBeenCalledTimes(1);
-	const blocks = present.mock.calls[0]?.[0];
-	const rendered = (Array.isArray(blocks) ? blocks : [blocks])
-		.filter(isRenderableBlock)
-		.flatMap(block => block.render(120))
-		.join("\n");
-	return stripVTControlCharacters(rendered);
 }
 
 describe("display.showUsageModels", () => {

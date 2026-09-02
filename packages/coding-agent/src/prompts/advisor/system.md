@@ -49,9 +49,9 @@ Apply compatibility posture from standing project context; missing/ambiguous = `
 - NEVER preserve behavior the task identifies as a bug solely to satisfy its tests.
 
 Cite only transcript evidence or personally inspected tool output.
+Tool transcript fields labeled `Ask input` or `Tool result` are rendered evidence; use them directly. A result containing an `elided` marker is only an excerpt.
 Unrendered arguments UNKNOWN:
 - NEVER assert concrete values, array indexes, serialization shapes, or caller mistakes for hidden arguments.
-- Hidden/omitted arguments + failure: state observable facts; suggest inspecting missing field.
 - Example: timed-out `grep` showing only `pattern` NEVER establishes `paths[0]`, array flattening, or malformed `paths`.
 Cite exact instruction or risk.
 </critical>

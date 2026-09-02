@@ -106,6 +106,12 @@ export interface RenderSessionContextOptions {
 	preservedLiveToolCallIds?: ReadonlySet<string>;
 }
 
+export interface AgentHubOpenOptions {
+	requireContent?: boolean;
+	armCloseTap?: boolean;
+	initialSection?: "agents" | "activity";
+}
+
 export interface InteractiveModeContext {
 	// UI access
 	ui: TUI;
@@ -379,6 +385,7 @@ export interface InteractiveModeContext {
 
 	// Command handling
 	handleExportCommand(text: string): Promise<void>;
+	handleTraceCommand(): Promise<void>;
 	handleShareCommand(): Promise<void>;
 	handleTodoCommand(args: string): Promise<void>;
 	handleSessionCommand(): Promise<void>;
@@ -426,6 +433,12 @@ export interface InteractiveModeContext {
 
 	// Selector handling
 	showSettingsSelector(): void;
+	/**
+	 * Open the fullscreen `/usage` dashboard overlay for the given reports.
+	 * `modelSelectors` is the caller-resolved per-provider model list; omitting
+	 * it lets the dashboard walk the registry itself.
+	 */
+	showUsageDashboard(reports: UsageReport[], modelSelectors?: string[]): void;
 	showAdvisorConfigure(): void;
 	showHistorySearch(): void;
 	showExtensionsDashboard(): void;
@@ -452,7 +465,7 @@ export interface InteractiveModeContext {
 	showProviderSetup(): Promise<void>;
 	showHookConfirm(title: string, message: string): Promise<boolean>;
 	showDebugSelector(): Promise<void>;
-	showAgentHub(options?: { requireContent?: boolean; armCloseTap?: boolean }): void;
+	showAgentHub(options?: AgentHubOpenOptions): void;
 	resetObserverRegistry(): void;
 
 	// Input handling
