@@ -739,13 +739,15 @@ if "__omp_prelude_loaded__" not in globals():
     class AgentHandle(_Handle):
         """Background subagent handle returned by ``agent()``."""
 
-        __slots__ = ("agent", "handle")
+        __slots__ = ("agent", "handle", "model", "family")
         kind = "agent"
 
         def __init__(self, id, agent, schema=None):
             super().__init__(id, schema)
             self.agent = agent
             self.handle = f"agent://{id}"
+            self.model = None
+            self.family = None
 
         def __repr__(self):
             return f"<agent {self.id} ({self.agent})>"
@@ -991,18 +993,22 @@ if "__omp_prelude_loaded__" not in globals():
         prompt,
         *,
         agent=None,
+        model=None,
         label=None,
         schema=None,
         schema_mode=None,
         isolated=None,
         apply=None,
         merge=None,
+        timeout=None,
         tools=None,
     ):
         """Start a background subagent and return its handle."""
         args = {"prompt": prompt}
         if agent is not None:
             args["agent"] = agent
+        if model is not None:
+            args["model"] = model
         if label is not None:
             args["label"] = label
         if schema is not None:
@@ -1015,12 +1021,21 @@ if "__omp_prelude_loaded__" not in globals():
             args["apply"] = bool(apply)
         if merge is not None:
             args["merge"] = bool(merge)
+        if timeout is not None:
+            args["timeout"] = timeout
         if tools is not None:
             args["tools"] = list(tools)
         result = _bridge_call("__agent__", args)
         if not isinstance(result, dict) or not isinstance(result.get("id"), str):
             raise RuntimeError("agent() did not return a handle")
-        return AgentHandle(result["id"], result.get("agent"), schema)
+        handle = AgentHandle(result["id"], result.get("agent"), schema)
+        details = result.get("details") if isinstance(result, dict) else None
+        if isinstance(details, dict):
+            if details.get("model") is not None:
+                handle.model = details["model"]
+            if details.get("family") is not None:
+                handle.family = details["family"]
+        return handle
 
     class WorkPool:
         """Pool of keep-alive subagents fed through the host workpool bridge."""
