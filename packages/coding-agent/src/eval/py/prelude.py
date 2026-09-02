@@ -745,13 +745,15 @@ if "__omp_prelude_loaded__" not in globals():
     class AgentHandle(_Handle):
         """Background subagent handle returned by ``agent()``."""
 
-        __slots__ = ("agent", "handle")
+        __slots__ = ("agent", "handle", "model", "family")
         kind = "agent"
 
         def __init__(self, id, agent, schema=None):
             super().__init__(id, schema)
             self.agent = agent
             self.handle = f"agent://{id}"
+            self.model = None
+            self.family = None
 
         def __repr__(self):
             return f"<agent {self.id} ({self.agent})>"
@@ -795,6 +797,9 @@ if "__omp_prelude_loaded__" not in globals():
             text = snapshot.get("text", "") if isinstance(snapshot, dict) else ""
             value = json.loads(text) if handle._schema is not None else text
         handle._result = value
+        if handle.kind == "agent":
+            handle.model = snapshot.get("model")
+            handle.family = snapshot.get("family")
         return value
 
     def wait(handles, timeout=None, *, raise_errors=True):
@@ -1002,6 +1007,7 @@ if "__omp_prelude_loaded__" not in globals():
         isolated=None,
         apply=None,
         merge=None,
+        timeout=None,
         tools=None,
     ):
         """Start a background subagent and return its handle."""
@@ -1020,6 +1026,8 @@ if "__omp_prelude_loaded__" not in globals():
             args["apply"] = bool(apply)
         if merge is not None:
             args["merge"] = bool(merge)
+        if timeout is not None:
+            args["timeout"] = timeout
         if tools is not None:
             args["tools"] = list(tools)
         result = _bridge_call("__agent__", args)

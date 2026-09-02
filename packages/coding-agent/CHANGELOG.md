@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Agent frontmatter `restrictTools` provides a hard tool allowlist for subagents and disables MCP, extension tools, and custom tools.
+- Eval `agent()` calls can set a per-call wall-clock timeout, and handle results report the served model and canonical model family.
+
 ### Changed
 
 - Agent Hub keeps existing agents in place while open; new agents appear first in the flat roster or within their tree sibling group ([#13066](https://github.com/can1357/oh-my-pi/pull/13066) by [@kmccleary3301](https://github.com/kmccleary3301))
