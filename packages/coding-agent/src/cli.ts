@@ -137,6 +137,7 @@ const AGENT_BRIDGE_CONTRACT = {
 	perCallTimeout: true,
 	servedModel: true,
 	servedFamily: true,
+	panelLineupFreeze: true,
 } as const;
 
 const TINY_WORKER_ARG = "__omp_worker_tiny_inference";

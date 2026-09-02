@@ -34,6 +34,8 @@ export * from "./main";
 // Run modes for programmatic SDK usage
 export * from "./modes";
 export * from "./modes/components";
+// Deliberation panels: roster resolution and the lineup freeze extensions consume
+export * from "./panel";
 // Theme utilities for custom tools
 export * from "./modes/theme/theme";
 // SDK for programmatic usage
