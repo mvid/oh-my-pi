@@ -23,6 +23,7 @@ export const EVAL_AGENT_BRIDGE_NAME = "__agent__";
 const agentArgsSchema = type({
 	prompt: "string>0",
 	"agent?": "string>0",
+	"model?": "string>0",
 	"label?": "string",
 	"schema?": "unknown",
 	"schemaMode?": "'permissive' | 'strict'",
@@ -30,12 +31,14 @@ const agentArgsSchema = type({
 	"apply?": "boolean",
 	"merge?": "boolean",
 	"handle?": "boolean",
+	"timeout?": "number>=0",
 	"+": "delete",
 });
 
 interface EvalAgentArgs {
 	prompt: string;
 	agent?: string;
+	model?: string;
 	label?: string;
 	schema?: unknown;
 	schemaMode?: StructuredSubagentSchemaMode;
@@ -43,6 +46,7 @@ interface EvalAgentArgs {
 	apply?: boolean;
 	merge?: boolean;
 	handle?: boolean;
+	timeout?: number;
 }
 
 export interface EvalAgentBridgeOptions {
@@ -59,6 +63,7 @@ export interface EvalAgentResult {
 		agent: string;
 		id: string;
 		model?: string | string[];
+		family?: string;
 		structured: boolean;
 		schemaSource?: "caller" | "agent" | "session";
 		schemaMode?: StructuredSubagentSchemaMode;
@@ -83,6 +88,20 @@ function parseAgentArgs(args: unknown): EvalAgentArgs {
 function trimToUndefined(value: string | undefined): string | undefined {
 	const trimmed = value?.trim();
 	return trimmed ? trimmed : undefined;
+}
+
+function resolveServedModelFamily(resolvedModel: string | undefined, session: ToolSession): string | undefined {
+	if (!resolvedModel) return undefined;
+	const model = session.modelRegistry?.getAvailable().find(candidate => {
+		const selector = `${candidate.provider}/${candidate.id}`;
+		return (
+			resolvedModel === selector ||
+			resolvedModel.startsWith(`${selector}:`) ||
+			resolvedModel.startsWith(`${selector}@`)
+		);
+	});
+	if (!model) return undefined;
+	return model.identity.class === "unknown" ? model.provider.toLowerCase() : model.identity.class;
 }
 
 function emitProgressStatus(emitStatus: ((event: JsStatusEvent) => void) | undefined, progress: AgentProgress): void {
@@ -147,15 +166,17 @@ export async function runEvalAgent(args: unknown, options: EvalAgentBridgeOption
 					invocationKind: "eval",
 					assignment: parsed.prompt,
 					...(parsed.agent !== undefined ? { agent: parsed.agent } : {}),
+					...(parsed.model !== undefined ? { model: parsed.model } : {}),
 					...(Object.hasOwn(parsed, "schema") ? { outputSchema: parsed.schema } : {}),
 					...(parsed.schemaMode !== undefined ? { schemaMode: parsed.schemaMode } : {}),
 					...(parsed.label !== undefined ? { identity: { label: parsed.label } } : {}),
 					...(isolation ? { isolation } : {}),
 					...(parsed.handle ? { retainArtifacts: true } : {}),
 					keepAlive: false,
-					// `maxRuntimeMs` is intentionally omitted: the executor then inherits
-					// `task.maxRuntimeMs`, matching the task tool. Pinning it to 0 here
-					// silently overrode the user's wall-clock cap for eval fan-outs.
+					// Omitted timeout inherits `task.maxRuntimeMs`; 0 disables the cap.
+					...(parsed.timeout !== undefined
+						? { maxRuntimeMs: parsed.timeout === 0 ? 0 : Math.max(1, Math.round(parsed.timeout * 1000)) }
+						: {}),
 					shareEvalSession: false,
 					...(options.signal !== undefined ? { signal: options.signal } : {}),
 					...(options.emitStatus
@@ -197,6 +218,7 @@ export async function runEvalAgent(args: unknown, options: EvalAgentBridgeOption
 		const schemaStatus = structuredOutput?.status === "unavailable" ? undefined : structuredOutput?.status;
 
 		const model = result.resolvedModel ?? policy.modelOverride;
+		const family = resolveServedModelFamily(result.resolvedModel, options.session);
 		const nestedPatches = result.nestedPatches?.length ? result.nestedPatches : undefined;
 		const isolationSummary = mergeSummary ? mergeSummary.trim() : undefined;
 		return {
@@ -206,6 +228,7 @@ export async function runEvalAgent(args: unknown, options: EvalAgentBridgeOption
 				agent: result.agent,
 				id: result.id,
 				...(model !== undefined ? { model } : {}),
+				...(family !== undefined ? { family } : {}),
 				structured,
 				...(schemaSource !== undefined ? { schemaSource } : {}),
 				...(schemaMode !== undefined ? { schemaMode } : {}),

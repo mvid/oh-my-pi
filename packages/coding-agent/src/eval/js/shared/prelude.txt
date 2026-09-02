@@ -104,8 +104,8 @@ if (!globalThis.__omp_js_prelude_loaded__) {
 			"agent",
 			opts,
 			rest,
-			["agent", "label", "schema", "isolated", "apply", "merge", "schemaMode"],
-			"{ agent, label, schema, isolated, apply, merge, schemaMode, handle }",
+			["agent", "label", "schema", "isolated", "apply", "merge", "schemaMode", "timeout", "model"],
+			"{ agent, label, schema, isolated, apply, merge, schemaMode, timeout, model, handle }",
 		);
 		const { handle, ...callArgs } = o;
 		const res = await globalThis.__omp_call_tool__("__agent__", { prompt, ...callArgs, handle: Boolean(handle) });
@@ -119,7 +119,7 @@ if (!globalThis.__omp_js_prelude_loaded__) {
 		}
 		const node = { text, output: text, handle: `agent://${details.id}`, id: details.id, agent: details.agent ?? null };
 		if (hasData || hasOwn(callArgs, "schema")) node.data = parsed;
-		for (const key of ["isolated", "patchPath", "branchName", "nestedPatches", "changesApplied", "isolationSummary"]) {
+		for (const key of ["model", "family", "isolated", "patchPath", "branchName", "nestedPatches", "changesApplied", "isolationSummary"]) {
 			if (details[key] !== undefined) node[key] = details[key];
 		}
 		return node;

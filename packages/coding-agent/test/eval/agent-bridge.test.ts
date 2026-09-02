@@ -90,6 +90,35 @@ describe("runEvalAgent", () => {
 		expect(options?.parentAgentId).toBe("BridgeParent");
 	});
 
+	it("maps per-call timeout and model overrides without changing omission", async () => {
+		const agent: AgentDefinition = {
+			name: "task",
+			description: "Task agent",
+			systemPrompt: "Handle task",
+			source: "bundled",
+		};
+		vi.spyOn(taskDiscovery, "discoverAgents").mockResolvedValue({ agents: [agent], projectAgentsDir: null });
+		const runSubprocessSpy = vi.spyOn(taskExecutor, "runSubprocess").mockResolvedValue(createResult());
+		const session = {
+			cwd: "/tmp",
+			settings: Settings.isolated(),
+			getSessionSpawns: () => "*",
+			getSessionFile: () => null,
+		} as unknown as ToolSession;
+
+		await runEvalAgent({ prompt: "default", agent: "task" }, { session });
+		await runEvalAgent({ prompt: "bounded", agent: "task", timeout: 5 }, { session });
+		await runEvalAgent({ prompt: "tiny", agent: "task", timeout: 0.0001 }, { session });
+		await runEvalAgent({ prompt: "disabled", agent: "task", timeout: 0 }, { session });
+		await runEvalAgent({ prompt: "routed", agent: "task", model: "provider/model:high" }, { session });
+
+		expect(runSubprocessSpy.mock.calls[0]?.[0].maxRuntimeMs).toBeUndefined();
+		expect(runSubprocessSpy.mock.calls[1]?.[0].maxRuntimeMs).toBe(5000);
+		expect(runSubprocessSpy.mock.calls[2]?.[0].maxRuntimeMs).toBe(1);
+		expect(runSubprocessSpy.mock.calls[3]?.[0].maxRuntimeMs).toBe(0);
+		expect(runSubprocessSpy.mock.calls[4]?.[0].modelOverride).toEqual(["provider/model:high"]);
+	});
+
 	it("returns executor-parsed structured data through the public eval bridge", async () => {
 		const agent: AgentDefinition = {
 			name: "task",
@@ -105,18 +134,35 @@ describe("runEvalAgent", () => {
 			data: { status: "ok" },
 		};
 		vi.spyOn(taskDiscovery, "discoverAgents").mockResolvedValue({ agents: [agent], projectAgentsDir: null });
-		vi.spyOn(taskExecutor, "runSubprocess").mockResolvedValue(createResult({ output: "not JSON", structuredOutput }));
+		vi.spyOn(taskExecutor, "runSubprocess").mockResolvedValue(
+			createResult({ output: "not JSON", structuredOutput, resolvedModel: "openai/gpt-served@upstream:high" }),
+		);
 		const session = {
 			cwd: "/tmp",
 			settings: Settings.isolated(),
 			getSessionSpawns: () => "*",
+			modelRegistry: {
+				getAvailable: () => [
+					{
+						provider: "openai",
+						id: "gpt-served",
+						identity: { class: "openai", family: "gpt" },
+					},
+				],
+			},
 			getSessionFile: () => null,
 		} as unknown as ToolSession;
 
 		const result = await runEvalAgent({ prompt: "do work", agent: "task", schemaMode: "strict" }, { session });
 
 		expect(result.data).toEqual({ status: "ok" });
-		expect(result.details).toMatchObject({ structured: true, schemaSource: "agent", schemaMode: "strict" });
+		expect(result.details).toMatchObject({
+			model: "openai/gpt-served@upstream:high",
+			family: "openai",
+			structured: true,
+			schemaSource: "agent",
+			schemaMode: "strict",
+		});
 	});
 
 	it("updates the real turn budget by output tokens only", async () => {

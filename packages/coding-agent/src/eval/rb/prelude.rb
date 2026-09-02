@@ -392,15 +392,17 @@ unless defined?($__omp_prelude_loaded) && $__omp_prelude_loaded
     schema.nil? ? text : JSON.parse(text)
   end
 
-  def agent(prompt, agent: "task", label: nil, schema: nil, schema_mode: nil, isolated: nil, apply: nil, merge: nil, handle: false)
+  def agent(prompt, agent: "task", model: nil, label: nil, schema: nil, schema_mode: nil, isolated: nil, apply: nil, merge: nil, timeout: nil, handle: false)
     args = { "prompt" => prompt }
     args["agent"] = agent unless agent.nil?
+    args["model"] = model unless model.nil?
     args["label"] = label unless label.nil?
     args["schema"] = schema unless schema.nil?
     args["schemaMode"] = schema_mode unless schema_mode.nil?
     args["isolated"] = !!isolated unless isolated.nil?
     args["apply"] = !!apply unless apply.nil?
     args["merge"] = !!merge unless merge.nil?
+    args["timeout"] = timeout unless timeout.nil?
     args["handle"] = true if handle
     res = OmpBridge.call("__agent__", args)
     text = res.is_a?(Hash) ? res["text"] : res
@@ -420,6 +422,8 @@ unless defined?($__omp_prelude_loaded) && $__omp_prelude_loaded
     }
     node["data"] = parsed if has_data || !schema.nil?
     {
+      "model" => "model",
+      "family" => "family",
       "isolated" => "isolated",
       "patchPath" => "patch_path",
       "branchName" => "branch_name",

@@ -488,12 +488,14 @@ if "__omp_prelude_loaded__" not in globals():
         prompt,
         *,
         agent="task",
+        model=None,
         label=None,
         schema=None,
         schema_mode=None,
         isolated=None,
         apply=None,
         merge=None,
+        timeout=None,
         handle=False,
     ):
         """Run a subagent and return its final output or structured data.
@@ -505,6 +507,8 @@ if "__omp_prelude_loaded__" not in globals():
         args = {"prompt": prompt}
         if agent is not None:
             args["agent"] = agent
+        if model is not None:
+            args["model"] = model
         if label is not None:
             args["label"] = label
         if schema is not None:
@@ -517,6 +521,8 @@ if "__omp_prelude_loaded__" not in globals():
             args["apply"] = bool(apply)
         if merge is not None:
             args["merge"] = bool(merge)
+        if timeout is not None:
+            args["timeout"] = timeout
         if handle:
             args["handle"] = True
         res = _bridge_call("__agent__", args)
@@ -544,6 +550,8 @@ if "__omp_prelude_loaded__" not in globals():
         if has_data or schema is not None:
             node["data"] = parsed
         for src_key, dst_key in (
+            ("model", "model"),
+            ("family", "family"),
             ("isolated", "isolated"),
             ("patchPath", "patch_path"),
             ("branchName", "branch_name"),

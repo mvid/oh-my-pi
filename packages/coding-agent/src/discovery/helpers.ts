@@ -243,6 +243,7 @@ export interface ParsedAgentFields {
 	thinkingLevel?: ConfiguredThinkingLevel;
 	autoloadSkills?: string[];
 	readSummarize?: boolean;
+	restrictTools?: boolean;
 	blocking?: boolean;
 	/** `true` = prewalk into the default target; string = prewalk into that model pattern. */
 	prewalk?: boolean | string;
@@ -303,6 +304,8 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 	const model = parseModelList(frontmatter.model);
 	const blocking = parseBoolean(frontmatter.blocking);
 	const readSummarize = parseBoolean(frontmatter.readSummarize);
+	const restrictTools = parseBoolean(frontmatter.restrictTools);
+	if (restrictTools === true && tools === undefined) return null;
 	// prewalk: true → hand off to the default prewalk target; "<pattern>" → custom target.
 	let prewalk: boolean | string | undefined = parseBoolean(frontmatter.prewalk);
 	if (prewalk === undefined && typeof frontmatter.prewalk === "string") {
@@ -329,6 +332,7 @@ export function parseAgentFields(frontmatter: Record<string, unknown>): ParsedAg
 		blocking,
 		autoloadSkills,
 		readSummarize,
+		restrictTools,
 		prewalk,
 		advisor,
 	};
