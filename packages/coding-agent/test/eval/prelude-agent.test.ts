@@ -29,7 +29,11 @@ describe("eval js agent() handle", () => {
 		const sandbox = loadPrelude(async (name, args) => {
 			seenName = name;
 			seenArgs = args as Record<string, unknown>;
-			return { id: "abc123", agent: "task" };
+			return {
+				id: "abc123",
+				agent: "task",
+				details: { agent: "task", id: "abc123", model: "m", family: "openai", structured: false },
+			};
 		});
 		const handle = (await (sandbox.agent as AgentHelper)("say hi", {
 			label: "Greeter",
@@ -40,6 +44,8 @@ describe("eval js agent() handle", () => {
 		expect(handle.id).toBe("abc123");
 		expect(handle.agent).toBe("task");
 		expect(handle.handle).toBe("agent://abc123");
+		expect(handle.model).toBe("m");
+		expect(handle.family).toBe("openai");
 	});
 
 	it("maps positional args onto named options in order", async () => {
