@@ -9,6 +9,9 @@
 ### Added
 
 - Added saved `/panel` roles with independent family-diverse or named-persona lineups for isolated read-only participants ([#7750](https://github.com/can1357/oh-my-pi/pull/7750) by [@mvid](https://github.com/mvid)).
+- Panel members accept a ranked candidate list, so a seat falls through to the next model when its primary is unavailable and records which candidate served.
+- Panel roles accept a `minFamilies` floor on distinct resolved model families, so a lineup that collapses onto fewer lineages than required never dispatches.
+- Panel runs now carry a `lineupHash` naming the served routes and the policy that admitted them, and extension packages can resolve rosters through `resolvePanelLineup`.
 - RPC `open_session` and `switch_session` accept an optional `provider`/`modelId` pair that binds the session to that model instead of its saved one, as `--model` does at startup; `RpcClient.openSession()`/`switchSession()` and the Python client's `open_session()`/`switch_session()` take it too ([#13689](https://github.com/can1357/oh-my-pi/pull/13689) by [@alphastorm](https://github.com/alphastorm))
 - Added `compat.statefulResponses` to `models.yml`, so a provider or model can opt into or out of stored Responses chaining without the process-wide `PI_OPENAI_STATEFUL` ([#13686](https://github.com/can1357/oh-my-pi/pull/13686) by [@alphastorm](https://github.com/alphastorm)).
 - Added the `app.stt.pushToTalk` keybinding, defaulting to `Space`, so push-to-talk can be remapped or disabled independently from speech-to-text and `app.stt.toggle` ([#6592](https://github.com/can1357/oh-my-pi/pull/6592) by [@anatoli-tsinovoy](https://github.com/anatoli-tsinovoy)).
@@ -775,18 +778,6 @@
 - Added `omp play` CLI for terminal-based playback of session recordings
 - Added intent descriptions to judgment batching
 - Added live progress tracking for judgment batches in the TUI
-- Agent frontmatter `restrictTools` provides a hard tool allowlist for subagents and disables MCP, extensions, and custom tools.
-- Eval `agent()` calls can set a per-call wall-clock timeout, and handle results report the served model and canonical model family.
-- Panel members accept a ranked candidate list, so a seat falls through to the next model when its primary is unavailable and records which candidate served.
-- Panel roles accept a `minFamilies` floor on distinct resolved model families, and a tighten-only `distinctFamilies` that lets a personas role demand cross-family independence.
-- Panel runs now carry a `lineupHash` naming the served routes and the policy that admitted them, and extension packages can resolve rosters through `resolvePanelLineup`.
-- Added `injectV1: false` option to `openai-models-list` discovery to fetch the model list from `{baseUrl}/models` without injecting `/v1`, for gateways that root their OpenAI-compatible surface at a versioned URL (e.g. `https://api.opper.ai/v3/compat`) where the `/v1`-injected endpoint returns only a small subset.
-- Added provider-reported credits and concrete routed-model counts to `/session` statistics ([#8590](https://github.com/can1357/oh-my-pi/pull/8590) by [@will-bogusz](https://github.com/will-bogusz)).
-- Added `CLINE_API_KEY` to the CLI environment help for native ClinePass subscription inference ([#7863](https://github.com/can1357/oh-my-pi/pull/7863) by [@will-bogusz](https://github.com/will-bogusz)).
-- Devin model selectors now accept the native CLI's short aliases (`devin/opus`, `devin/swe`), dotted upstream spellings (`devin/gemini-3.7-flash`), and raw effort-route wire uids for dynamically collapsed families ([#8590](https://github.com/can1357/oh-my-pi/pull/8590) by [@will-bogusz](https://github.com/will-bogusz)).
-- Added provider-supplied model metadata to the `/models` detail line: `new`, `beta`, and `recommended` badges beside the model name, and the upstream description after the context, cost, and perf facts ([#8590](https://github.com/can1357/oh-my-pi/pull/8590) by [@will-bogusz](https://github.com/will-bogusz)).
-- Standalone `CLAUDE.md` files in the project root (and ancestor directories) are now loaded as context, mirroring `AGENTS.md` discovery; config-directory context files still take precedence per scope.
-- Added a `display.showZeroUsageMeters` setting to hide untouched supplemental model and tier quota meters from live usage reports.
 
 ### Changed
 
