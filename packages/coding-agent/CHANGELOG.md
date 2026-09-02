@@ -7,7 +7,7 @@
 - Agent frontmatter `restrictTools` provides a hard tool allowlist for subagents and disables MCP, extensions, and custom tools.
 - Eval `agent()` calls can set a per-call wall-clock timeout, and handle results report the served model and canonical model family.
 - Panel members accept a ranked candidate list, so a seat falls through to the next model when its primary is unavailable and records which candidate served.
-- Panel roles accept `minFamilies` and `distinctFamilies`, making the lineup diversity requirement explicit instead of implied by the strategy.
+- Panel roles accept a `minFamilies` floor on distinct resolved model families, and a tighten-only `distinctFamilies` that lets a personas role demand cross-family independence.
 - Panel runs now carry a `lineupHash` naming the served routes and the policy that admitted them, and extension packages can resolve rosters through `resolvePanelLineup`.
 - Added `injectV1: false` option to `openai-models-list` discovery to fetch the model list from `{baseUrl}/models` without injecting `/v1`, for gateways that root their OpenAI-compatible surface at a versioned URL (e.g. `https://api.opper.ai/v3/compat`) where the `/v1`-injected endpoint returns only a small subset.
 - Added provider-reported credits and concrete routed-model counts to `/session` statistics ([#8590](https://github.com/can1357/oh-my-pi/pull/8590) by [@will-bogusz](https://github.com/will-bogusz)).
