@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed GPT-6 Astra showing as free with a 272K-token window in the OpenAI Codex catalog by applying its documented pricing and 1.05M-token context window ([#10852](https://github.com/can1357/oh-my-pi/pull/10852) by [@xiyihan0](https://github.com/xiyihan0)).
+
 ## [18.1.9] - 2026-09-04
 
 ### Added
