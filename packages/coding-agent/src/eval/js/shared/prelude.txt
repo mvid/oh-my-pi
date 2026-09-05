@@ -244,6 +244,10 @@ if (!globalThis.__omp_js_prelude_loaded__) {
 			: handle._schema !== undefined
 				? JSON.parse(snapshot?.text ?? "")
 				: (snapshot?.text ?? "");
+		if (handle.kind === "agent") {
+			if (typeof snapshot?.model === "string") handle.model = snapshot.model;
+			if (typeof snapshot?.family === "string") handle.family = snapshot.family;
+		}
 		handle._result = value;
 		return value;
 	};
