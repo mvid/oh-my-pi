@@ -35,6 +35,7 @@ const agentArgsSchema = type({
 	"apply?": "boolean",
 	"merge?": "boolean",
 	"tools?": "string[]",
+	/** Child runtime cap in SECONDS (JS `agent(prompt, { timeout })`); 0 disables. */
 	"timeout?": "number>=0",
 	"+": "delete",
 });
@@ -249,7 +250,7 @@ export async function runEvalAgent(args: unknown, options: EvalAgentBridgeOption
 						identity: { id, label: parsed.label },
 						...(isolation ? { isolation } : {}),
 						...(customTools ? { customTools } : {}),
-						// Omitted timeout inherits `task.maxRuntimeMs`; 0 disables the cap.
+						// `timeout` is seconds. Omitted inherits `task.maxRuntimeMs`; 0 disables the cap.
 						...(parsed.timeout !== undefined
 							? { maxRuntimeMs: parsed.timeout === 0 ? 0 : Math.max(1, Math.round(parsed.timeout * 1000)) }
 							: {}),
