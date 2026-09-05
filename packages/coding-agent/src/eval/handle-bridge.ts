@@ -102,6 +102,12 @@ function agentSnapshot(ref: EvalHandleRef, job: AsyncJob): EvalHandleSnapshot {
 	if (isUnknownRecord(evalResult)) {
 		if (typeof evalResult.text === "string") snapshot.text = evalResult.text;
 		if (Object.hasOwn(evalResult, "data")) snapshot.data = evalResult.data;
+		if (isUnknownRecord(evalResult.details)) {
+			const { model, family } = evalResult.details;
+			const settled = snapshot as EvalHandleSnapshot & { model?: string; family?: string };
+			if (typeof model === "string") settled.model = model;
+			if (typeof family === "string") settled.family = family;
+		}
 	}
 	return snapshot;
 }
