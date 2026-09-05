@@ -436,7 +436,11 @@ export interface InteractiveModeContext {
 
 	// Selector handling
 	showSettingsSelector(): void;
-	/** Open the fullscreen `/usage` dashboard overlay for the given reports. */
+	/**
+	 * Open the fullscreen `/usage` dashboard. Both display opt-outs
+	 * (`display.showZeroUsageMeters`, `display.showUsageModels`) are applied by
+	 * the dashboard itself via `resolveUsageView`, so callers pass raw reports.
+	 */
 	showUsageDashboard(reports: UsageReport[]): void;
 	showAdvisorConfigure(): void;
 	showHistorySearch(): void;

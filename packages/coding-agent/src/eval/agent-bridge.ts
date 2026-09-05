@@ -35,6 +35,7 @@ const agentArgsSchema = type({
 	"apply?": "boolean",
 	"merge?": "boolean",
 	"tools?": "string[]",
+	"timeout?": "number>=0",
 	"+": "delete",
 });
 
@@ -48,6 +49,7 @@ interface EvalAgentArgs {
 	apply?: boolean;
 	merge?: boolean;
 	tools?: string[];
+	timeout?: number;
 }
 
 export interface EvalAgentBridgeOptions {
@@ -70,6 +72,8 @@ export interface EvalAgentResult {
 		agent: string;
 		id: string;
 		model?: string | string[];
+		/** Served model family (identity class, or provider when unclassified). */
+		family?: string;
 		structured: boolean;
 		schemaSource?: "caller" | "agent" | "session";
 		schemaMode?: StructuredSubagentSchemaMode;
@@ -107,7 +111,29 @@ function buildSubagentFailureMessage(agentName: string, result: SingleResult): s
 	);
 }
 
-async function buildEvalAgentResult(execution: StructuredSubagentResult): Promise<EvalAgentResult> {
+/**
+ * Family of the model the child actually served, matched against the registry
+ * by selector (with `:effort`/`@revision` suffixes tolerated). Unclassified
+ * models report their provider so callers always get a coarse grouping.
+ */
+function resolveServedModelFamily(resolvedModel: string | undefined, session: ToolSession): string | undefined {
+	if (!resolvedModel) return undefined;
+	const model = session.modelRegistry?.getAvailable().find(candidate => {
+		const selector = `${candidate.provider}/${candidate.id}`;
+		return (
+			resolvedModel === selector ||
+			resolvedModel.startsWith(`${selector}:`) ||
+			resolvedModel.startsWith(`${selector}@`)
+		);
+	});
+	if (!model) return undefined;
+	return model.identity.class === "unknown" ? model.provider.toLowerCase() : model.identity.class;
+}
+
+async function buildEvalAgentResult(
+	execution: StructuredSubagentResult,
+	session: ToolSession,
+): Promise<EvalAgentResult> {
 	const { result, policy, mergeSummary, changesApplied, artifactsDir } = execution;
 	if (result.exitCode !== 0 || result.error || result.aborted) {
 		const failureMessage = buildSubagentFailureMessage(policy.agentName, result)
@@ -140,6 +166,7 @@ async function buildEvalAgentResult(execution: StructuredSubagentResult): Promis
 	const schemaMode = structured ? structuredOutput?.mode : undefined;
 	const schemaStatus = structuredOutput?.status === "unavailable" ? undefined : structuredOutput?.status;
 	const model = result.resolvedModel ?? policy.modelOverride;
+	const family = resolveServedModelFamily(result.resolvedModel, session);
 	const nestedPatches = result.nestedPatches?.length ? result.nestedPatches : undefined;
 	const isolationSummary = mergeSummary ? mergeSummary.trim() : undefined;
 	return {
@@ -149,6 +176,7 @@ async function buildEvalAgentResult(execution: StructuredSubagentResult): Promis
 			agent: result.agent,
 			id: result.id,
 			...(model !== undefined ? { model } : {}),
+			...(family !== undefined ? { family } : {}),
 			structured,
 			...(schemaSource !== undefined ? { schemaSource } : {}),
 			...(schemaMode !== undefined ? { schemaMode } : {}),
@@ -221,6 +249,10 @@ export async function runEvalAgent(args: unknown, options: EvalAgentBridgeOption
 						identity: { id, label: parsed.label },
 						...(isolation ? { isolation } : {}),
 						...(customTools ? { customTools } : {}),
+						// Omitted timeout inherits `task.maxRuntimeMs`; 0 disables the cap.
+						...(parsed.timeout !== undefined
+							? { maxRuntimeMs: parsed.timeout === 0 ? 0 : Math.max(1, Math.round(parsed.timeout * 1000)) }
+							: {}),
 						retainArtifacts: true,
 						keepAlive: true,
 						shareEvalSession: false,
@@ -230,7 +262,7 @@ export async function runEvalAgent(args: unknown, options: EvalAgentBridgeOption
 							void reportProgress(`Running agent ${progress.id}...`, { progress: [progress] });
 						},
 					});
-					const result = await buildEvalAgentResult(execution);
+					const result = await buildEvalAgentResult(execution, options.session);
 					await reportProgress(result.text, {
 						progress: latestProgress ? [latestProgress] : [],
 						evalResult: result,

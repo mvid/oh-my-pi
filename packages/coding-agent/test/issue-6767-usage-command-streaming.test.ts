@@ -94,7 +94,7 @@ describe("issue #6767 /usage output during streaming", () => {
 		// into the transcript, mid-stream or otherwise — mounting above the
 		// growing live block is what duplicated in native scrollback (#6767).
 		expect(showDashboard).toHaveBeenCalledTimes(1);
-		expect(showDashboard).toHaveBeenCalledWith(usageReports);
+		expect(showDashboard.mock.calls[0]?.[0]).toEqual(usageReports);
 		expect(mode.chatContainer.children).toEqual([streamedReply]);
 
 		streaming = false;

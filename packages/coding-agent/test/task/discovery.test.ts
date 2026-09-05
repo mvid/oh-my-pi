@@ -15,6 +15,8 @@ const OMP_AGENT_MD = [
 	"---",
 	"name: omp-test-agent",
 	"description: OMP-native test agent.",
+	"tools: read, grep, glob",
+	"restrictTools: true",
 	"---",
 	"You are an OMP task agent.",
 ].join("\n");
@@ -88,6 +90,7 @@ describe("discoverAgents", () => {
 
 		expect(names).toContain("omp-test-agent");
 		expect(names).not.toContain("cc-test-agent");
+		expect(agents.find(agent => agent.name === "omp-test-agent")?.restrictTools).toBe(true);
 		expect(projectAgentsDir).toBe(path.join(projectDir, ".omp", "agents"));
 	});
 

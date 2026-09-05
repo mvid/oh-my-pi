@@ -543,7 +543,8 @@ function buildExecutorOptions(
 		getArtifactsDir: session.getArtifactsDir ?? (() => null),
 		getSessionId: session.getSessionId ?? (() => null),
 	};
-	const restrictToolNames = policy.restrictToolNames || session.restrictToolNames === true;
+	const restrictToolNames =
+		policy.restrictToolNames || session.restrictToolNames === true || policy.effectiveAgent.restrictTools === true;
 	const enableMCP = !restrictToolNames && policy.enableMCP;
 	return {
 		cwd: session.cwd,
