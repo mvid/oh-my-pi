@@ -13,7 +13,7 @@ import * as taskExecutor from "@oh-my-pi/pi-coding-agent/task/executor";
 import * as isolationRunner from "@oh-my-pi/pi-coding-agent/task/isolation-runner";
 import { runStructuredSubagent } from "@oh-my-pi/pi-coding-agent/task/structured-subagent";
 import type { AgentDefinition } from "@oh-my-pi/pi-coding-agent/task/types";
-import type { SingleResult } from "@oh-my-pi/pi-tui/tools/task";
+import type { SingleResult, StructuredSubagentOutput } from "@oh-my-pi/pi-tui/tools/task";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
 
 import { cfgTaskIsolationEnabled } from "@oh-my-pi/pi-coding-agent/task/settings";
@@ -114,11 +114,11 @@ describe("runEvalAgent", () => {
 			getSessionFile: () => null,
 		} as unknown as ToolSession;
 
-		await runEvalAgent({ prompt: "default", agent: "task" }, { session });
-		await runEvalAgent({ prompt: "bounded", agent: "task", timeout: 5 }, { session });
-		await runEvalAgent({ prompt: "tiny", agent: "task", timeout: 0.0001 }, { session });
-		await runEvalAgent({ prompt: "disabled", agent: "task", timeout: 0 }, { session });
-		await runEvalAgent({ prompt: "routed", agent: "task", model: "provider/model:high" }, { session });
+		await runEvalAgentAndWait({ prompt: "default", agent: "task" }, { session });
+		await runEvalAgentAndWait({ prompt: "bounded", agent: "task", timeout: 5 }, { session });
+		await runEvalAgentAndWait({ prompt: "tiny", agent: "task", timeout: 0.0001 }, { session });
+		await runEvalAgentAndWait({ prompt: "disabled", agent: "task", timeout: 0 }, { session });
+		await runEvalAgentAndWait({ prompt: "routed", agent: "task", model: "provider/model:high" }, { session });
 
 		expect(runSubprocessSpy.mock.calls[0]?.[0].maxRuntimeMs).toBeUndefined();
 		expect(runSubprocessSpy.mock.calls[1]?.[0].maxRuntimeMs).toBe(5000);
@@ -142,8 +142,13 @@ describe("runEvalAgent", () => {
 			data: { status: "ok" },
 		};
 		vi.spyOn(taskDiscovery, "discoverAgents").mockResolvedValue({ agents: [agent], projectAgentsDir: null });
-		vi.spyOn(taskExecutor, "runSubprocess").mockResolvedValue(
-			createResult({ output: "not JSON", structuredOutput, resolvedModel: "openai/gpt-served@upstream:high" }),
+		vi.spyOn(taskExecutor, "runSubprocess").mockImplementation(async options =>
+			createResult({
+				id: options.id,
+				output: "not JSON",
+				structuredOutput,
+				resolvedModel: "openai/gpt-served@upstream:high",
+			}),
 		);
 		const session = {
 			cwd: "/tmp",
@@ -170,6 +175,12 @@ describe("runEvalAgent", () => {
 			structured: true,
 			schemaSource: "agent",
 			schemaMode: "strict",
+		});
+		const snapshot = await runEvalWait({ items: [{ kind: "agent", id: result.details.id }] }, { session });
+		expect(snapshot.items[0]).toMatchObject({
+			status: "completed",
+			model: "openai/gpt-served@upstream:high",
+			family: "openai",
 		});
 	});
 
