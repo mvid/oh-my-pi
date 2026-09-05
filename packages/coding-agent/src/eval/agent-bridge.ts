@@ -32,6 +32,7 @@ const agentArgsSchema = type({
 	"isolated?": "boolean",
 	"apply?": "boolean",
 	"merge?": "boolean",
+	/** Child runtime cap in SECONDS (JS `agent(prompt, { timeout })`); 0 disables. */
 	"timeout?": "number>=0",
 	"tools?": "string[]",
 	"+": "delete",
@@ -116,28 +117,6 @@ function resolveServedModelFamily(resolvedModel: string | undefined, session: To
 	return model.identity.class === "unknown" ? model.provider.toLowerCase() : model.identity.class;
 }
 
-function emitProgressStatus(emitStatus: ((event: JsStatusEvent) => void) | undefined, progress: AgentProgress): void {
-	if (!emitStatus) return;
-	const preview = (progress.assignment ?? progress.task ?? "").split("\n")[0]?.slice(0, 120);
-	emitStatus({
-		op: "agent",
-		id: progress.id,
-		agent: progress.agent,
-		status: progress.status,
-		lastIntent: progress.lastIntent,
-		currentTool: progress.currentTool,
-		currentToolArgs: progress.currentToolArgs,
-		taskPreview: preview || undefined,
-		toolCount: progress.toolCount,
-		tokens: progress.tokens,
-		contextTokens: progress.contextTokens,
-		contextWindow: progress.contextWindow,
-		cost: progress.cost,
-		durationMs: progress.durationMs,
-		model: progress.resolvedModel,
-	});
-}
-
 function buildSubagentFailureMessage(agentName: string, result: SingleResult): string {
 	const abortReason = trimToUndefined(result.abortReason);
 	if (result.aborted && abortReason) return abortReason;
@@ -149,7 +128,10 @@ function buildSubagentFailureMessage(agentName: string, result: SingleResult): s
 	);
 }
 
-async function buildEvalAgentResult(execution: StructuredSubagentResult, session: ToolSession): Promise<EvalAgentResult> {
+async function buildEvalAgentResult(
+	execution: StructuredSubagentResult,
+	session: ToolSession,
+): Promise<EvalAgentResult> {
 	const { result, policy, mergeSummary, changesApplied, artifactsDir } = execution;
 	if (result.exitCode !== 0 || result.error || result.aborted) {
 		const failureMessage = buildSubagentFailureMessage(policy.agentName, result)
@@ -265,7 +247,7 @@ export async function runEvalAgent(args: unknown, options: EvalAgentBridgeOption
 						...(parsed.agent !== undefined ? { agent: parsed.agent } : {}),
 						...(parsed.model !== undefined ? { model: parsed.model } : {}),
 						...(Object.hasOwn(parsed, "schema") ? { outputSchema: parsed.schema } : {}),
-						// Omitted timeout inherits `task.maxRuntimeMs`; 0 disables the cap.
+						// `timeout` is seconds. Omitted inherits `task.maxRuntimeMs`; 0 disables the cap.
 						...(parsed.timeout !== undefined
 							? { maxRuntimeMs: parsed.timeout === 0 ? 0 : Math.max(1, Math.round(parsed.timeout * 1000)) }
 							: {}),
