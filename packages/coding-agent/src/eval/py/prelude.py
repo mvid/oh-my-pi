@@ -813,7 +813,6 @@ if "__omp_prelude_loaded__" not in globals():
         apply=None,
         merge=None,
         tools=None,
-        timeout=None,
     ):
         """Start a background subagent and return its handle."""
         args = {"prompt": prompt}
@@ -833,8 +832,6 @@ if "__omp_prelude_loaded__" not in globals():
             args["merge"] = bool(merge)
         if tools is not None:
             args["tools"] = list(tools)
-        if timeout is not None:
-            args["timeout"] = float(timeout)
         result = _bridge_call("__agent__", args)
         if not isinstance(result, dict) or not isinstance(result.get("id"), str):
             raise RuntimeError("agent() did not return a handle")
