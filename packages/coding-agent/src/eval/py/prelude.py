@@ -794,6 +794,11 @@ if "__omp_prelude_loaded__" not in globals():
         else:
             text = snapshot.get("text", "") if isinstance(snapshot, dict) else ""
             value = json.loads(text) if handle._schema is not None else text
+        if isinstance(handle, AgentHandle):
+            if isinstance(snapshot.get("model"), str):
+                handle.model = snapshot["model"]
+            if isinstance(snapshot.get("family"), str):
+                handle.family = snapshot["family"]
         handle._result = value
         return value
 
@@ -1031,14 +1036,7 @@ if "__omp_prelude_loaded__" not in globals():
         result = _bridge_call("__agent__", args)
         if not isinstance(result, dict) or not isinstance(result.get("id"), str):
             raise RuntimeError("agent() did not return a handle")
-        handle = AgentHandle(result["id"], result.get("agent"), schema)
-        details = result.get("details") if isinstance(result, dict) else None
-        if isinstance(details, dict):
-            if details.get("model") is not None:
-                handle.model = details["model"]
-            if details.get("family") is not None:
-                handle.family = details["family"]
-        return handle
+        return AgentHandle(result["id"], result.get("agent"), schema)
 
     class WorkPool:
         """Pool of keep-alive subagents fed through the host workpool bridge."""
