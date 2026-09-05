@@ -47,3 +47,33 @@ export function filterUsageReportsForDisplay(reports: UsageReport[], options: Us
 		return limits.length === report.limits.length ? report : { ...report, limits };
 	});
 }
+
+/** Settings/session surface the `/usage` view resolver reads. */
+export interface UsageViewInputs {
+	showZeroUsageMeters?: boolean;
+	showUsageModels?: boolean;
+	getUsageReportingModelSelectors: (reports: UsageReport[]) => string[];
+}
+
+/** Reports and model selectors `/usage` displays, after both display opt-outs. */
+export interface UsageView {
+	displayReports: UsageReport[];
+	usageModelSelectors: string[];
+}
+
+/**
+ * Apply both `/usage` display opt-outs in one place so the TUI dashboard and
+ * the ACP text builder cannot drift: zeroed supplemental meters drop first, and
+ * the per-provider model list is skipped entirely when opted out (cheaper than
+ * filtering it away in the renderer).
+ */
+export function resolveUsageView(reports: UsageReport[], inputs: UsageViewInputs): UsageView {
+	const displayReports = filterUsageReportsForDisplay(reports, {
+		showZeroUsageMeters: inputs.showZeroUsageMeters,
+	});
+	return {
+		displayReports,
+		usageModelSelectors:
+			inputs.showUsageModels === false ? [] : inputs.getUsageReportingModelSelectors(displayReports),
+	};
+}

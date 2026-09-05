@@ -47,7 +47,7 @@ function session(
 		hasUI: false,
 		settings: Settings.isolated({
 			"task.maxRecursionDepth": options.maxDepth ?? 2,
-			"task.isolation.mode": "none",
+			"task.isolation.enabled": false,
 			"task.enableLsp": true,
 		}),
 		getSessionFile: () => null,

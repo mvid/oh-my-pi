@@ -10,13 +10,13 @@
  * `command-controller.ts` and the ACP text builder in `usage-report.ts`.
  */
 
-import { beforeAll, describe, expect, it, vi } from "bun:test";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
 import type { UsageReport } from "@oh-my-pi/pi-ai";
-import { CommandController } from "@oh-my-pi/pi-coding-agent/modes/controllers/command-controller";
-import { getThemeByName, setThemeInstance } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
-import type { InteractiveModeContext } from "@oh-my-pi/pi-coding-agent/modes/types";
+import { renderUsageReports } from "@oh-my-pi/pi-coding-agent/modes/controllers/command-controller";
+import { getThemeByName, setThemeInstance, theme } from "@oh-my-pi/pi-coding-agent/modes/theme/theme";
 import { buildUsageReportText } from "@oh-my-pi/pi-coding-agent/slash-commands/helpers/usage-report";
+import { resolveUsageView } from "@oh-my-pi/pi-coding-agent/utils/usage-display";
 
 const SELECTORS = ["test-provider/gpt-5.6", "test-provider/claude-sonnet-4.6"];
 
@@ -42,14 +42,6 @@ function usageReport(): UsageReport {
 	};
 }
 
-interface RenderableBlock {
-	render(width: number): string[];
-}
-
-function isRenderableBlock(value: unknown): value is RenderableBlock {
-	return value !== null && typeof value === "object" && "render" in value && typeof value.render === "function";
-}
-
 async function buildAcpText(showUsageModels: boolean): Promise<string> {
 	return await buildUsageReportText({
 		settings: settingsDouble(showUsageModels),
@@ -62,31 +54,20 @@ async function buildAcpText(showUsageModels: boolean): Promise<string> {
 }
 
 async function buildTuiText(showUsageModels: boolean): Promise<string> {
-	const present = vi.fn();
-	const ctx = {
-		settings: settingsDouble(showUsageModels),
-		session: { getUsageReportingModelSelectors: () => SELECTORS },
-		ui: { terminal: { columns: 100 } },
-		present,
-		presentCommandOutput: present,
-		showWarning: vi.fn(),
-		showError: vi.fn(),
-	} as unknown as InteractiveModeContext;
-	await new CommandController(ctx).handleUsageCommand([usageReport()]);
-	expect(present).toHaveBeenCalledTimes(1);
-	const blocks = present.mock.calls[0]?.[0];
-	const rendered = (Array.isArray(blocks) ? blocks : [blocks])
-		.filter(isRenderableBlock)
-		.flatMap(block => block.render(120))
-		.join("\n");
-	return stripVTControlCharacters(rendered);
+	const { displayReports, usageModelSelectors } = resolveUsageView([usageReport()], {
+		showUsageModels,
+		getUsageReportingModelSelectors: () => SELECTORS,
+	});
+	return stripVTControlCharacters(
+		renderUsageReports(displayReports, theme, Date.now(), 120, undefined, usageModelSelectors),
+	);
 }
 
 describe("display.showUsageModels", () => {
 	beforeAll(async () => {
-		const theme = await getThemeByName("dark");
-		if (!theme) throw new Error("Expected dark theme");
-		setThemeInstance(theme);
+		const darkTheme = await getThemeByName("dark");
+		if (!darkTheme) throw new Error("Expected dark theme");
+		setThemeInstance(darkTheme);
 	});
 
 	for (const [label, build] of [

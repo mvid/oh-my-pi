@@ -1,17 +1,10 @@
 import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
 import { sanitizeText } from "@oh-my-pi/pi-utils";
 import type { OAuthAccountIdentity } from "../../session/auth-storage";
-import { filterUsageReportsForDisplay } from "../../utils/usage-display";
+import { resolveUsageView } from "../../utils/usage-display";
 import type { SlashCommandRuntime } from "../types";
 import { reportMatchesActiveAccount } from "./active-oauth-account";
-import { formatDuration, renderAsciiBar } from "./format";
-
-function formatProviderName(provider: string): string {
-	return provider
-		.split(/[-_]/g)
-		.map(part => (part ? part[0].toUpperCase() + part.slice(1) : ""))
-		.join(" ");
-}
+import { formatDuration, formatProviderName, renderAsciiBar } from "./format";
 
 function formatWindowSuffix(label: string, windowLabel: string | undefined): string {
 	if (!windowLabel) return "";
@@ -173,15 +166,11 @@ export async function buildUsageReportText(runtime: SlashCommandRuntime): Promis
 						runtime.session.sessionId,
 					)
 				: undefined;
-			const displayReports = filterUsageReportsForDisplay(reports, {
+			const { displayReports, usageModelSelectors } = resolveUsageView(reports, {
 				showZeroUsageMeters: runtime.settings.get("display.showZeroUsageMeters"),
+				showUsageModels: runtime.settings.get("display.showUsageModels"),
+				getUsageReportingModelSelectors: next => provider.getUsageReportingModelSelectors?.(next) ?? [],
 			});
-			// `display.showUsageModels` (default on) opts out of the per-provider model list.
-			// Skipping the registry walk here is cheaper than filtering it away in the renderer.
-			const usageModelSelectors =
-				runtime.settings.get("display.showUsageModels") === false
-					? []
-					: (provider.getUsageReportingModelSelectors?.(displayReports) ?? []);
 			return renderUsageReports(
 				displayReports,
 				Date.now(),
