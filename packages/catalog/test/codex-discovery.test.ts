@@ -14,6 +14,24 @@ import type { ModelSpec } from "@oh-my-pi/pi-catalog/types";
 import { resolveProviderModelReference } from "@oh-my-pi/pi-coding-agent/config/model-resolver";
 
 describe("Codex model discovery", () => {
+	it("normalizes optional maximum context windows separately from the default window", async () => {
+		const result = await fetchCodexModels({
+			accessToken: "test-token",
+			fetchFn: async () =>
+				Response.json({
+					models: [
+						{ slug: "gpt-6-astra", context_window: 272_000, max_context_window: 872_000 },
+						{ slug: "gpt-5.5", context_window: 272_000 },
+						{ slug: "invalid-maximum", context_window: 64_000, max_context_window: -1 },
+					],
+				}),
+		});
+		const astra = result?.models.find(model => model.id === "gpt-6-astra");
+		expect(astra).toMatchObject({ contextWindow: 272_000, maxContextWindow: 872_000 });
+		expect(result?.models.find(model => model.id === "gpt-5.5")).not.toHaveProperty("maxContextWindow");
+		expect(result?.models.find(model => model.id === "invalid-maximum")).not.toHaveProperty("maxContextWindow");
+	});
+
 	it("marks discovered models for provider-native V2 compaction", async () => {
 		let capturedHeaders: Headers | undefined;
 		const fetchFn: typeof fetch = Object.assign(
@@ -232,12 +250,13 @@ describe("Codex model discovery", () => {
 			expect(model.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
 			expect(model.contextWindow).toBe(272_000);
 			const builtModel = buildModel(model);
-			// Codex credits keep this base rate above 272K and do not charge for
-			// cache writes; unlike the API card, there is no long-context tier.
+			// Codex credits have no long-context pricing tier. Catalog composition
+			// retains the standard window; the registry expands it only when
+			// extended context is enabled.
 			expect(builtModel.cost).toEqual({ input: 10, output: 50, cacheRead: 1, cacheWrite: 0 });
 			expect(builtModel.serviceTierCost).toEqual({ flex: 0.5, priority: 2.5 });
 			expect(builtModel).toMatchObject({
-				contextWindow: 1_050_000,
+				contextWindow: 272_000,
 				maxTokens: 128_000,
 			});
 		}
