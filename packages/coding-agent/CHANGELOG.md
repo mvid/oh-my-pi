@@ -2,31 +2,35 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `/reload-config` and opt-in `settings.hotReload` to apply outside configuration edits in live sessions, including safe default-role model rebinds.
+- Added `advisor.lateConcern` (`preserve` or `steer`) so late advisor concerns can wake the agent after a final answer.
+- Added opt-in `tier.autoFastMode` and a blocked fast-mode status for provider refusals, downgrades, and ineligible accounts.
+- Added opt-in `settings.autoRestartOnUpdate` so persisted sessions resume after a stable executable replacement.
+- Added saved `/panel` roles with candidate fallbacks, minimum family diversity, frozen lineups, and lineup hashes.
+- Added `tui.tmuxWindowName` to mirror the active session name into tmux and restore the prior name on exit.
+- Added `display.showUsageModels` and `display.showZeroUsageMeters` controls for `/usage`.
+- Added `/reload-plugins` to re-import extension modules without restarting omp.
+- Added hard subagent tool containment through agent `restrictTools`, plus per-call eval-agent timeouts and served-model reporting.
+
+### Changed
+
+- Coding agents now distinguish greenfield and established compatibility contracts, defaulting undeclared scopes to preserving existing behavior.
+- Configuration reloads refresh advisor enablement, status-line settings, and approval policy before direct or mounted tool dispatch.
+- Anthropic usage reports carry priority entitlement so automatic fast mode skips known-ineligible accounts.
+
+### Fixed
+
+- Deferred-command previews now show the newest queued panel instead of the oldest.
+- `/advisor status` no longer waits for a quota fetch before rendering.
+- Auto-restart waits while the executable is missing or mid-build, and binary builds land through an atomic rename.
+- Bare `/fast` toggles can disable a configured priority tier even when the active provider cannot realize it.
+
 ## [18.1.17] - 2026-09-10
 
 ### Added
 
-- Agent frontmatter `restrictTools` provides a hard tool allowlist for subagents and disables MCP, extensions, and custom tools.
-- Eval `agent()` calls can set a per-call wall-clock timeout, and handle results report the served model and canonical model family.
-- Panel members accept a ranked candidate list, so a seat falls through to the next model when its primary is unavailable and records which candidate served.
-- Panel roles accept a `minFamilies` floor on distinct resolved model families, so a lineup that collapses onto fewer lineages than required never dispatches.
-- Panel runs now carry a `lineupHash` naming the served routes and the policy that admitted them, and extension packages can resolve rosters through `resolvePanelLineup`.
-- Added `injectV1: false` option to `openai-models-list` discovery to fetch the model list from `{baseUrl}/models` without injecting `/v1`, for gateways that root their OpenAI-compatible surface at a versioned URL (e.g. `https://api.opper.ai/v3/compat`) where the `/v1`-injected endpoint returns only a small subset.
-- Added provider-reported credits and concrete routed-model counts to `/session` statistics ([#8590](https://github.com/can1357/oh-my-pi/pull/8590) by [@will-bogusz](https://github.com/will-bogusz)).
-- Added `CLINE_API_KEY` to the CLI environment help for native ClinePass subscription inference ([#7863](https://github.com/can1357/oh-my-pi/pull/7863) by [@will-bogusz](https://github.com/will-bogusz)).
-- Devin model selectors now accept the native CLI's short aliases (`devin/opus`, `devin/swe`), dotted upstream spellings (`devin/gemini-3.7-flash`), and raw effort-route wire uids for dynamically collapsed families ([#8590](https://github.com/can1357/oh-my-pi/pull/8590) by [@will-bogusz](https://github.com/will-bogusz)).
-- Added provider-supplied model metadata to the `/models` detail line: `new`, `beta`, and `recommended` badges beside the model name, and the upstream description after the context, cost, and perf facts ([#8590](https://github.com/can1357/oh-my-pi/pull/8590) by [@will-bogusz](https://github.com/will-bogusz)).
-- Standalone `CLAUDE.md` files in the project root (and ancestor directories) are now loaded as context, mirroring `AGENTS.md` discovery; config-directory context files still take precedence per scope.
-- Added a `display.showZeroUsageMeters` setting to hide untouched supplemental model and tier quota meters from live usage reports.
-
-### Changed
-
-- Coding agents now distinguish greenfield and established compatibility contracts, defaulting undeclared projects and scopes to preserving existing behavior.
-
-### Changed
-
-- Disabled `hashline` edit mode for Kimi, Mimo, DeepSeek Flash, and Stepfun models for stability
-- Added the `retry.waitForUsageReset` setting: when a provider reports usage-limit exhaustion with a reset time (5-hour or weekly quota windows on any provider), the session sleeps until the reset instead of failing fast past `retry.maxDelayMs`.
 - Unsent prompts cleared with Ctrl+C can now be recalled with Up, including pastes and images; disable Recall Cleared Drafts in settings to discard future clears instead ([#11524](https://github.com/can1357/oh-my-pi/pull/11524) by [@camjac251](https://github.com/camjac251)).
 - Added `tui.vimMode`, an opt-in modal editing layer for the prompt, off by default ([#3299](https://github.com/can1357/oh-my-pi/issues/3299)). Escape leaves Insert; Normal mode has `hjkl`, `0`, `^`, `$`, `w`, `b`, `e`, `gg`, `G`, count prefixes, `x`/`D`/`C`, `dd`/`yy`, `p`/`P` and `u`; `v`/`V` start a Visual selection that `y` copies and `d` deletes.
 - Added a `vim` status-line segment showing the current Vim mode (`NORMAL`/`INSERT`/`VISUAL`/`V-LINE`), the half-typed command beside it (Vim's `showcmd`, e.g. `2d`), and the Visual selection height (`V-LINE 4L`). Included in every built-in preset and hidden entirely unless `tui.vimMode` is on; `custom` preset users can add `"vim"` to `statusLine.leftSegments`.
@@ -162,7 +166,6 @@
 - Report oversized selected lines that cannot fit after read context, with a working raw recovery selector instead of a looping continuation hint ([#10775](https://github.com/can1357/oh-my-pi/issues/10775)).
 - Approved plan content is now inlined into approve-and-execute prompts instead of forcing the executor to re-read the durable plan file ([#10923](https://github.com/can1357/oh-my-pi/issues/10923)).
 - Fixed WorkPool child sessions crashing during startup while constructing their incremental `yield` tool schema.
-- Auto-restart no longer fires while the executable is moved aside or mid-build, so sessions wait for the replacement to land instead of failing with `ENOENT` on relaunch.
 - Commit summaries written in Vietnamese, Korean, and other accented scripts are no longer rejected for exceeding the length limit, and keep their accents as typed.
 - Tool-scoped TTSR rules now match finalized arguments reliably when providers stream short or throttled tool calls ([#10910](https://github.com/can1357/oh-my-pi/issues/10910)).
 - Restored `getSupportedThinkingLevels` in the legacy `pi-ai` shim so extensions importing it from `@earendil-works/pi-ai` (e.g. `@companion-ai/feynman`) pass Bun's named-export check and load ([#10800](https://github.com/can1357/oh-my-pi/issues/10800)).
@@ -1193,25 +1196,6 @@
 
 ### Added
 
-- Added the `advisor.lateConcern` setting (`preserve` | `steer`, default `preserve`): when set to `steer`, an advisor `concern` raised after the agent's final answer wakes the agent to act on it (like a `blocker`) instead of being preserved as a passive card. Aimed at slow advisors whose review reliably lands after the turn completes, so their concerns would otherwise never trigger a turn.
-- Added opt-in `tier.autoFastMode` (default `false`) and `tier.autoFastModeDurationMinutes` (default `20`). Primary-session requests use priority processing for the configured duration after a user prompt; manual `/fast` remains authoritative, while tasks, advisors, panels, side-channel turns, and auto-learn capture keep their configured tiers. A provider that refuses the lease's priority request is reported once per model instead of silently dropping the status-line indicator.
-- Added opt-in `settings.autoRestartOnUpdate` (default `false`). A persisted interactive session detects a stable replacement of its running executable, waits for the active turn to settle, then resumes through the normal session path with unsaved editor text retained.
-- Added `/reload-config`, which re-reads `~/.omp/agent/config.yml` (and any `--config` overlay) into a running session instead of requiring a restart. `Settings.reloadGlobal()` stages the file, aborts with the previous layer intact on a parse error, diffs effective values per key, and fires both the setting hooks and the effective-change signals. The command reports which keys changed, which are known to need a restart, which took effect only partly (with the reason), and whether the session's model was rebound.
-- Added `settings.hotReload` (default `false`): when enabled, an outside edit to `config.yml` is picked up automatically at a safe boundary, before the next prompt when the session is idle or at the end of the current turn when one is streaming, so the next turn never runs on stale settings.
-- Added a live rebind of the session's model when `modelRoles.default` changes. It defers to the next turn boundary while streaming, declines over an explicit `--model`, a restored session's model, and a manual `/model` pick, and retargets an active retry fallback's restore selector instead of interrupting the cascade.
-- Made `advisor.enabled` and the `statusLine.*` group reachable from a settings change. `advisor.enabled` was captured once at construction and only reachable through `/advisor`; the `statusLine.*` group already had a live updater but was refreshed only when the session accent happened to change. Both now fire on any change to their keys.
-- Added saved `/panel` roles. A role declares an independent family-diverse or named-persona lineup; `/panel answer` and `/panel plan` preview the resolved lineup, dispatch isolated read-only participants, and synthesize their labeled results in the primary session.
-- Added opt-in `tier.autoFastMode` (default `false`) and `tier.autoFastModeDurationMinutes` (default `20`). Primary-session requests use priority processing for the configured duration after a user prompt; manual `/fast` remains authoritative, while tasks, advisors, panels, side-channel turns, and auto-learn capture keep their configured tiers. A provider that refuses the lease's priority request is reported once per model instead of silently dropping the status-line indicator.
-- Added a red status-line fast-mode icon for priority that is requested but refused. `AgentSession.fastModeState()` splits the old boolean into `off` / `active` / `blocked`; `blocked` covers an Anthropic fast-mode rejection, an OpenAI `service_tier` downgrade, and an account the provider says cannot use priority. `/fast status` reports `blocked` for the same state, and a served priority turn clears it without an explicit re-arm.
-- Added `UsageReport.priorityEntitlement`, populated from the Claude usage endpoint's `spend.enabled` / `extra_usage.is_enabled`. Anthropic gates fast mode on usage credits, so `tier.autoFastMode` now skips the request when the account is known to be ineligible instead of spending a rejected round-trip per process. An explicit `/fast on` still attempts it (the snapshot can be stale) and warns up front.
-- Added detection of OpenAI priority downgrades: the standard Responses path already reads the served `service_tier` for cost, and now also marks the turn's `disabledFeatures` when a `priority` request comes back at a lower tier, so the indicator stops claiming priority the account never got. Scoped to `provider: "openai"` — the Codex endpoint echoes a `service_tier` unrelated to what it served (`resolveCodexCostServiceTier` already treats it as no information), so reading a downgrade out of it would report every Codex turn as refused.
-- Bumped the Anthropic usage-report cache key to v4. The report cache is persistent sqlite shared by every omp process on the machine, so without the bump a build predating `priorityEntitlement` keeps refilling the slot with entitlement-free reports and the priority gate reads "unknown" for as long as one old process is running.
-- Added `tui.tmuxWindowName` (default off), which renames the enclosing tmux window to the active session name so `tmux list-windows -a` identifies live sessions across machines. The original window name and its `automatic-rename` setting are restored on every exit path, including SIGINT/SIGTERM/SIGHUP and fatal errors.
-- Added a `display.showUsageModels` setting (default `true`) that opts out of the "Models with usage data" list in `/usage`, for users who only want the quota bars. Leaving it at the default keeps the existing `/usage` output unchanged.
-- Added support for the [Agent Plugins 1.0.0 standard](https://agent-plugins.org): plugin packages with a root `plugin.json` targeting the canonical schema are discovered from marketplace installs, `--plugin-dir`, and configured extension roots, with `skills/` and `mcp.json` loaded per the specification (closed-schema validation per skills-ref, `${PLUGIN_ROOT}`/`${PLUGIN_DATA}` expansion, reserved subprocess environment, instance-keyed persistent data directories, and per-component failure isolation). Package-boundary containment is enforced before every read — including `skill://` resource access from the read tool and bash, where plugin skill files must realpath-resolve inside the plugin root.
-- Remote MCP transports now enforce header precedence and origin policy: client-generated HTTP/MCP/authorization headers win over configured headers case-insensitively, and Agent Plugins servers never forward configured headers across a redirect to a different origin (method-changing redirects of JSON-RPC POSTs are refused). Agent Plugins stdio `env` values and remote `headers` are likewise exempt from config-value resolution (no ambient env-name lookup, no `!command` execution, empty values preserved).
-- Added `omp share <session>`: share a saved session by id prefix or `.jsonl` path without launching the agent — same encrypted upload, store selection, and `share.redactSecrets` handling as the `/share` slash command.
-- Added `AGENT=1` to coding-agent child-process environments so downstream tools can detect agent-driven execution ([#7847](https://github.com/can1357/oh-my-pi/issues/7847)).
 - Added Extensions tab group to settings schema
 
 ### Changed
