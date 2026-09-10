@@ -366,6 +366,7 @@
 - Added `omp play` CLI for terminal-based playback of session recordings
 - Added intent descriptions to judgment batching
 - Added live progress tracking for judgment batches in the TUI
+- Added `tui.tmuxWindowName` (default off), which renames the enclosing tmux window to the active session name and restores the original name and `automatic-rename` setting on every exit path ([#7850](https://github.com/can1357/oh-my-pi/pull/7850) by [@mvid](https://github.com/mvid)).
 
 ### Changed
 
@@ -1322,7 +1323,6 @@
 
 - Added the `retry.waitForUsageReset` setting: when a provider reports usage-limit exhaustion with a reset time (5-hour or weekly quota windows on any provider), the session sleeps until the reset instead of failing fast past `retry.maxDelayMs`.
 - Added opt-in `bash.allowCompoundCommands` approval for conservative literal `&&` chains, with ordered per-segment rules and normal bash policy fallback for unmatched segments. The opt-in requires a positively classified POSIX-quoting shell; incompatible and unknown shells retain legacy approval. Whole-chain denies take precedence over earlier prompts.
-- Added `tui.tmuxWindowName` (default off), which renames the enclosing tmux window to the active session name so `tmux list-windows -a` identifies live sessions across machines. The original window name and its `automatic-rename` setting are restored on every exit path, including SIGINT/SIGTERM/SIGHUP and fatal errors.
 
 ### Fixed
 
