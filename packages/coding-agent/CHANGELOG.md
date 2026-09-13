@@ -26,6 +26,7 @@
 - `/advisor status` no longer waits for a quota fetch before rendering.
 - Auto-restart waits while the executable is missing or mid-build, and binary builds land through an atomic rename.
 - Bare `/fast` toggles can disable a configured priority tier even when the active provider cannot realize it.
+- Configured default model fallback chains now select their first available model at startup instead of an unrelated authenticated provider.
 
 ## [18.1.17] - 2026-09-10
 
