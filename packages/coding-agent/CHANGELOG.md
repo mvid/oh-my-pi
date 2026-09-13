@@ -828,6 +828,11 @@
 - `#readProjectSettings` now logs capability warnings when a project `.claude/settings.json` fails to parse, instead of silently dropping them ([#11570](https://github.com/can1357/oh-my-pi/issues/11570)).
 - A malformed project `.claude/settings.json` now produces a warning instead of being silently ignored ([#11570](https://github.com/can1357/oh-my-pi/issues/11570)).
 - Reduced memory usage during long responses while thinking is hidden ([#11632](https://github.com/can1357/oh-my-pi/pull/11632) by [@redsolver](https://github.com/redsolver)).
+- Deferred-command previews now show the newest queued panel instead of the oldest.
+- `/advisor status` no longer waits for a quota fetch before rendering.
+- Auto-restart waits while the executable is missing or mid-build, and binary builds land through an atomic rename.
+- Bare `/fast` toggles can disable a configured priority tier even when the active provider cannot realize it.
+- Configured default model fallback chains now select their first available model at startup instead of an unrelated authenticated provider.
 
 ## [18.1.17] - 2026-09-10
 
