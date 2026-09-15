@@ -6436,6 +6436,18 @@ describe("advisor", () => {
 			}
 		});
 
+		it("preserves a non-interrupting nit after a terminal answer", () => {
+			expect(
+				resolveAdvisorDeliveryChannel({
+					severity: "nit",
+					autoResumeSuppressed: false,
+					streaming: false,
+					aborting: false,
+					terminalAnswerNoQueuedWork: true,
+				}),
+			).toBe("preserve");
+		});
+
 		it("preserves a late concern when the primary already ended with a terminal answer", () => {
 			expect(
 				resolveAdvisorDeliveryChannel({
