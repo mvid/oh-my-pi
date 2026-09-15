@@ -124,12 +124,13 @@ export function resolveAdvisorDeliveryChannel(opts: {
 	allowTerminalConcernSteering?: boolean;
 	interruptImmuneTurnActive?: boolean;
 	preserveOnly?: boolean;
+	lateConcern?: "preserve" | "steer";
 }): AdvisorDeliveryChannel {
 	if (opts.preserveOnly && !opts.streaming) return "preserve";
 	if (
 		opts.terminalAnswerNoQueuedWork &&
 		opts.severity !== "blocker" &&
-		!opts.allowTerminalConcernSteering &&
+		!(opts.severity === "concern" && (opts.allowTerminalConcernSteering || opts.lateConcern === "steer")) &&
 		!opts.streaming &&
 		!opts.aborting
 	)
