@@ -6453,6 +6453,18 @@ describe("advisor", () => {
 			).toBe("preserve");
 		});
 
+		it("preserves a late nit under user-interrupt suppression", () => {
+			expect(
+				resolveAdvisorDeliveryChannel({
+					severity: "nit",
+					autoResumeSuppressed: true,
+					streaming: false,
+					aborting: false,
+					terminalAnswerNoQueuedWork: true,
+				}),
+			).toBe("preserve");
+		});
+
 		it("preserves a late concern when the primary already ended with a terminal answer", () => {
 			expect(
 				resolveAdvisorDeliveryChannel({
