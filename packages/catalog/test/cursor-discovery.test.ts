@@ -294,30 +294,52 @@ describe("fetchCursorUsableModels", () => {
 		]);
 	});
 
-	it("floors the GPT-5.6 family at 1M including the unlabeled fast lanes", async () => {
+	it("raises documented Cursor context-window floors at buildModel time", async () => {
+		// Discovered models that match bundled references receive their catalog
+		// windows. Provider KDL floors apply when each spec is built.
 		const response = create(GetUsableModelsResponseSchema, {
 			models: [
-				create(ModelDetailsSchema, { modelId: "gpt-5.6-sol", displayName: "GPT-5.6 Sol" }),
-				create(ModelDetailsSchema, { modelId: "gpt-5.6-sol-fast", displayName: "GPT-5.6 Sol Fast" }),
-				create(ModelDetailsSchema, { modelId: "gpt-5.6-luna-fast", displayName: "GPT-5.6 Luna Fast" }),
-				create(ModelDetailsSchema, { modelId: "gpt-5.6-terra-fast", displayName: "GPT-5.6 Terra Fast" }),
+				create(ModelDetailsSchema, { modelId: "cursor-grok-4.6" }),
+				create(ModelDetailsSchema, { modelId: "cursor-grok-4.5" }),
+				create(ModelDetailsSchema, { modelId: "default" }),
+				create(ModelDetailsSchema, { modelId: "kimi-k2.7-code" }),
+				create(ModelDetailsSchema, { modelId: "gpt-5.6-sol-fast" }),
+				create(ModelDetailsSchema, { modelId: "gpt-5.6-luna-fast" }),
+				create(ModelDetailsSchema, { modelId: "gpt-5.6-terra-fast" }),
+				create(ModelDetailsSchema, { modelId: "claude-opus-5-preview" }),
+				create(ModelDetailsSchema, { modelId: "claude-fable-5-preview" }),
+				create(ModelDetailsSchema, { modelId: "gpt-5.6-sol-medium", displayName: "GPT-5.6 Sol 1M" }),
 			],
 		});
-		const fastBaseUrl = await startCursorDiscoveryServer(toBinary(GetUsableModelsResponseSchema, response));
+		const floorBaseUrl = await startCursorDiscoveryServer(toBinary(GetUsableModelsResponseSchema, response));
 
-		const models = await fetchCursorUsableModels({ apiKey: "test-token", baseUrl: fastBaseUrl, timeoutMs: 1_000 });
-
+		const models = await fetchCursorUsableModels({ apiKey: "test-token", baseUrl: floorBaseUrl, timeoutMs: 1_000 });
 		const discovered = Object.fromEntries((models ?? []).map(model => [model.id, model.contextWindow]));
-		expect(discovered["gpt-5.6-sol-fast"]).toBe(200_000);
-		expect(discovered["gpt-5.6-luna-fast"]).toBe(200_000);
-		expect(discovered["gpt-5.6-terra-fast"]).toBe(200_000);
+		expect(discovered).toEqual({
+			"claude-fable-5-preview": 200_000,
+			"claude-opus-5-preview": 200_000,
+			"cursor-grok-4.5": 256_000,
+			"cursor-grok-4.6": 256_000,
+			default: 256_000,
+			"gpt-5.6-luna-fast": 272_000,
+			"gpt-5.6-sol-fast": 272_000,
+			"gpt-5.6-sol-medium": 1_000_000,
+			"gpt-5.6-terra-fast": 272_000,
+			"kimi-k2.7-code": 262_000,
+		});
 
 		const built = Object.fromEntries((models ?? []).map(model => [model.id, buildModel(model).contextWindow]));
 		expect(built).toEqual({
-			"gpt-5.6-sol": 1_000_000,
-			"gpt-5.6-sol-fast": 1_000_000,
+			"claude-fable-5-preview": 300_000,
+			"claude-opus-5-preview": 300_000,
+			"cursor-grok-4.5": 256_000,
+			"cursor-grok-4.6": 256_000,
+			default: 256_000,
 			"gpt-5.6-luna-fast": 1_000_000,
+			"gpt-5.6-sol-fast": 1_000_000,
+			"gpt-5.6-sol-medium": 1_000_000,
 			"gpt-5.6-terra-fast": 1_000_000,
+			"kimi-k2.7-code": 262_000,
 		});
 	});
 

@@ -25,7 +25,11 @@ import { ModelRegistry } from "../config/model-registry";
 import { Settings } from "../config/settings";
 import { discoverAuthStorage } from "../sdk";
 import { resolveAuthBrokerConfig } from "../session/auth-broker-config";
-import { filterUsageReportsForDisplay, type UsageDisplayOptions } from "../utils/usage-display";
+import {
+	collapseSharedUsageReports,
+	filterUsageReportsForDisplay,
+	type UsageDisplayOptions,
+} from "../utils/usage-display";
 
 const BAR_WIDTH = 28;
 
@@ -642,14 +646,14 @@ export function formatUsageBreakdown(
 	disabled: DisabledCredentialSummary[] = [],
 	options: UsageDisplayOptions = {},
 ): string {
-	const reports = filterUsageReportsForDisplay(inputReports, options);
+	const displayReports = filterUsageReportsForDisplay(collapseSharedUsageReports(inputReports), options);
 	const reportsByProvider = new Map<string, UsageReport[]>();
-	for (const report of reports) {
+	for (const report of displayReports) {
 		const list = reportsByProvider.get(report.provider) ?? [];
 		list.push(report);
 		reportsByProvider.set(report.provider, list);
 	}
-	const unreported = collectUnreportedAccounts(reports, accounts);
+	const unreported = collectUnreportedAccounts(displayReports, accounts);
 	const unreportedByProvider = new Map<string, UsageAccountIdentity[]>();
 	for (const account of unreported) {
 		const list = unreportedByProvider.get(account.provider) ?? [];
@@ -669,7 +673,7 @@ export function formatUsageBreakdown(
 	].sort((a, b) => a.localeCompare(b));
 
 	const lines: string[] = [];
-	const latestFetchedAt = Math.max(0, ...reports.map(report => report.fetchedAt ?? 0));
+	const latestFetchedAt = Math.max(0, ...displayReports.map(report => report.fetchedAt ?? 0));
 	const headerSuffix = latestFetchedAt ? chalk.dim(` · fetched ${formatDuration(nowMs - latestFetchedAt)} ago`) : "";
 	lines.push(`${chalk.bold("Usage")}${headerSuffix}`);
 

@@ -54,6 +54,8 @@ export interface UsageScope {
 	tier?: string;
 	windowId?: string;
 	shared?: boolean;
+	/** Stable identity shared by routing-specific copies of one upstream quota. */
+	sharedGroup?: string;
 }
 
 /** Normalized limit entry for a single window or quota bucket. */
@@ -285,6 +287,7 @@ export const usageScopeSchema = type({
 	"tier?": "string",
 	"windowId?": "string",
 	"shared?": "boolean",
+	"sharedGroup?": "string",
 });
 
 export const usageLimitSchema = type({

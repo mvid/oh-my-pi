@@ -59,10 +59,11 @@ function renderUsageReports(
 	resolveActiveAccount?: (provider: string) => OAuthAccountIdentity | undefined,
 	usageModelSelectors: readonly string[] = [],
 ): string {
-	const latestFetchedAt = Math.max(...reports.map(report => report.fetchedAt ?? 0));
+	const displayReports = reports;
+	const latestFetchedAt = Math.max(...displayReports.map(report => report.fetchedAt ?? 0));
 	const lines = [`Usage${latestFetchedAt ? ` (${formatDuration(nowMs - latestFetchedAt)} ago)` : ""}`];
 	const grouped = new Map<string, UsageReport[]>();
-	for (const report of reports) {
+	for (const report of displayReports) {
 		const providerReports = grouped.get(report.provider) ?? [];
 		providerReports.push(report);
 		grouped.set(report.provider, providerReports);

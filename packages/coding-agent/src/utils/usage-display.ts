@@ -1,5 +1,40 @@
 import { resolveUsedFraction, type UsageLimit, type UsageReport } from "@oh-my-pi/pi-ai";
 
+function collapseSharedLimits(limits: UsageLimit[]): UsageLimit[] {
+	const seenGroups = new Set<string>();
+	let collapsed: UsageLimit[] | undefined;
+
+	for (let index = 0; index < limits.length; index++) {
+		const limit = limits[index]!;
+		const group = limit.scope.sharedGroup;
+		if (group !== undefined && seenGroups.has(group)) {
+			collapsed ??= limits.slice(0, index);
+			continue;
+		}
+		if (group !== undefined) seenGroups.add(group);
+		collapsed?.push(limit);
+	}
+
+	return collapsed ?? limits;
+}
+
+/** Collapse routing-specific copies of a shared quota for user-facing usage views. */
+export function collapseSharedUsageReports(reports: UsageReport[]): UsageReport[] {
+	let collapsed: UsageReport[] | undefined;
+
+	for (let index = 0; index < reports.length; index++) {
+		const report = reports[index]!;
+		const limits = collapseSharedLimits(report.limits);
+		const displayReport = limits === report.limits ? report : { ...report, limits };
+		if (displayReport !== report) {
+			collapsed ??= reports.slice(0, index);
+		}
+		collapsed?.push(displayReport);
+	}
+
+	return collapsed ?? reports;
+}
+
 export interface UsageDisplayOptions {
 	showZeroUsageMeters?: boolean;
 }
@@ -55,20 +90,16 @@ export interface UsageViewInputs {
 	getUsageReportingModelSelectors: (reports: UsageReport[]) => string[];
 }
 
-/** Reports and model selectors `/usage` displays, after both display opt-outs. */
+/** Reports and model selectors `/usage` displays, after display normalization and opt-outs. */
 export interface UsageView {
 	displayReports: UsageReport[];
 	usageModelSelectors: string[];
 }
 
-/**
- * Apply both `/usage` display opt-outs in one place so the TUI dashboard and
- * the ACP text builder cannot drift: zeroed supplemental meters drop first, and
- * the per-provider model list is skipped entirely when opted out (cheaper than
- * filtering it away in the renderer).
- */
+/** Apply shared-quota collapsing and both `/usage` display opt-outs in one place. */
 export function resolveUsageView(reports: UsageReport[], inputs: UsageViewInputs): UsageView {
-	const displayReports = filterUsageReportsForDisplay(reports, {
+	const collapsedReports = collapseSharedUsageReports(reports);
+	const displayReports = filterUsageReportsForDisplay(collapsedReports, {
 		showZeroUsageMeters: inputs.showZeroUsageMeters,
 	});
 	return {
