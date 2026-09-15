@@ -1,35 +1,17 @@
-import { expect, mock, test } from "bun:test";
+import { afterEach, expect, test, vi } from "bun:test";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { createPanelPersonaAgent, type PanelPersona, renderPanelAssignment } from "@oh-my-pi/pi-coding-agent/panel";
 import type { ToolSession } from "@oh-my-pi/pi-coding-agent/tools";
+import { preparePanelRun, runPanel } from "../../src/panel/runtime";
+import * as structuredSubagent from "../../src/task/structured-subagent";
 import type { StructuredSubagentRequest, StructuredSubagentResult } from "../../src/task/structured-subagent";
 
 const dispatched: StructuredSubagentRequest[] = [];
 
-mock.module("../../src/task/structured-subagent", () => ({
-	runStructuredSubagent: async (request: StructuredSubagentRequest) => {
-		dispatched.push(request);
-		return {
-			result: {
-				index: request.index ?? 0,
-				id: `panelist-${request.index ?? 0}`,
-				agent: "panelist",
-				agentSource: "bundled",
-				task: request.assignment,
-				exitCode: 0,
-				output: `response-${request.index ?? 0}`,
-				stderr: "",
-				truncated: false,
-				durationMs: 1,
-				tokens: 1,
-				requests: 1,
-			},
-		} as StructuredSubagentResult;
-	},
-}));
-
-const { preparePanelRun, runPanel } = await import("../../src/panel/runtime");
+afterEach(() => {
+	vi.restoreAllMocks();
+});
 
 const reviewer: PanelPersona = {
 	label: "Initial reviewer",
@@ -46,6 +28,25 @@ const implementer: PanelPersona = {
 };
 
 test("runtime dispatches the reviewed plan after settings and model availability change", async () => {
+	vi.spyOn(structuredSubagent, "runStructuredSubagent").mockImplementation(async request => {
+		dispatched.push(request);
+		return {
+			result: {
+				index: request.index ?? 0,
+				id: "panelist-" + (request.index ?? 0),
+				agent: "panelist",
+				agentSource: "bundled",
+				task: request.assignment,
+				exitCode: 0,
+				output: "response-" + (request.index ?? 0),
+				stderr: "",
+				truncated: false,
+				durationMs: 1,
+				tokens: 1,
+				requests: 1,
+			},
+		} as StructuredSubagentResult;
+	});
 	const claude = getBundledModel("anthropic", "claude-sonnet-4-5");
 	const gpt = getBundledModel("openai", "gpt-5.4");
 	if (!claude || !gpt) throw new Error("Test models not found");

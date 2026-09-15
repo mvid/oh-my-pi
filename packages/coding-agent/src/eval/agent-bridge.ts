@@ -81,8 +81,12 @@ export interface EvalAgentResult {
 		schemaStatus?: "valid" | "invalid";
 		isolated?: boolean;
 		patchPath?: string;
+		/** False when `patchPath` is an empty root diff and the work lives in `nestedPatchPaths`. */
+		hasRootChanges?: boolean;
 		branchName?: string;
 		nestedPatches?: NestedRepoPatch[];
+		/** On-disk copies of `nestedPatches`, written before the isolation workspace was removed. */
+		nestedPatchPaths?: string[];
 		changesApplied?: boolean | null;
 		isolationSummary?: string;
 	};
@@ -184,8 +188,10 @@ async function buildEvalAgentResult(
 			...(schemaStatus !== undefined ? { schemaStatus } : {}),
 			...(policy.isIsolated ? { isolated: true, changesApplied } : {}),
 			...(result.patchPath !== undefined ? { patchPath: result.patchPath } : {}),
+			...(result.hasRootChanges !== undefined ? { hasRootChanges: result.hasRootChanges } : {}),
 			...(result.branchName !== undefined ? { branchName: result.branchName } : {}),
 			...(nestedPatches !== undefined ? { nestedPatches } : {}),
+			...(result.nestedPatchPaths?.length ? { nestedPatchPaths: result.nestedPatchPaths } : {}),
 			...(isolationSummary !== undefined ? { isolationSummary } : {}),
 		},
 	};
