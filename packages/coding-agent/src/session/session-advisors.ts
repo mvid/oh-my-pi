@@ -1370,16 +1370,16 @@ export class SessionAdvisors {
 		const source = advisor.slug ? advisor.name : undefined;
 		const interrupting = isInterruptingSeverity(severity);
 		const terminalAnswerNoQueuedWork = this.#hasTerminalTextAnswerWithoutQueuedWork();
-		const terminalUnwindPreserve = this.#terminalUnwindActive && severity !== "blocker" && terminalAnswerNoQueuedWork;
 		const channel = resolveAdvisorDeliveryChannel({
 			severity,
 			autoResumeSuppressed: this.#advisorAutoResumeSuppressed,
-			preserveOnly: this.#preserveAdvisorAdvice || terminalUnwindPreserve,
+			preserveOnly: this.#preserveAdvisorAdvice,
 			// Key on the live agent-core loop, not session `isStreaming` (which also
 			// counts `#promptInFlightCount` during post-turn unwind). Only a running
 			// loop consumes a steer at its next boundary.
-			streaming: this.#host.agent.state.isStreaming && !this.#preserveTerminalYieldAdvice && !terminalUnwindPreserve,
+			streaming: this.#host.agent.state.isStreaming && !this.#preserveTerminalYieldAdvice,
 			aborting: this.#host.abortInProgress(),
+			terminalUnwindActive: this.#terminalUnwindActive,
 			terminalAnswerNoQueuedWork,
 			lateConcern: this.#host.settings.get("advisor.lateConcern"),
 			interruptImmuneTurnActive: interrupting && this.#isAdvisorInterruptImmuneTurnActive(),

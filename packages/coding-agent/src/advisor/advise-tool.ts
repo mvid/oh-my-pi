@@ -125,13 +125,29 @@ export function resolveAdvisorDeliveryChannel(opts: {
 	streaming: boolean;
 	aborting: boolean;
 	terminalAnswerNoQueuedWork?: boolean;
+	terminalUnwindActive?: boolean;
 	interruptImmuneTurnActive?: boolean;
 	preserveOnly?: boolean;
 	lateConcern?: "preserve" | "steer";
 }): AdvisorDeliveryChannel {
+	const lateConcernSteers =
+		opts.terminalAnswerNoQueuedWork === true &&
+		opts.severity === "concern" &&
+		!opts.streaming &&
+		!opts.aborting &&
+		opts.lateConcern === "steer" &&
+		!opts.autoResumeSuppressed;
 	if (opts.preserveOnly && !opts.streaming) return "preserve";
+	if (
+		opts.terminalUnwindActive &&
+		opts.terminalAnswerNoQueuedWork &&
+		opts.severity !== "blocker" &&
+		!opts.streaming &&
+		!lateConcernSteers
+	)
+		return "preserve";
 	if (opts.terminalAnswerNoQueuedWork && opts.severity !== "blocker" && !opts.streaming && !opts.aborting)
-		return opts.lateConcern === "steer" && !opts.autoResumeSuppressed ? "steer" : "preserve";
+		return lateConcernSteers ? "steer" : "preserve";
 	if (!isInterruptingSeverity(opts.severity)) return "aside";
 	if (opts.autoResumeSuppressed && (opts.aborting || !opts.streaming)) return "preserve";
 	if (opts.interruptImmuneTurnActive && opts.severity !== "blocker") return "aside";

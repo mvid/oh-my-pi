@@ -6485,6 +6485,7 @@ describe("advisor", () => {
 					streaming: false,
 					aborting: false,
 					terminalAnswerNoQueuedWork: true,
+					terminalUnwindActive: true,
 					lateConcern: "steer",
 					interruptImmuneTurnActive: true,
 				}),
@@ -6499,6 +6500,7 @@ describe("advisor", () => {
 					streaming: false,
 					aborting: false,
 					terminalAnswerNoQueuedWork: true,
+					terminalUnwindActive: true,
 					lateConcern: "preserve",
 				}),
 			).toBe("preserve");
@@ -6514,6 +6516,7 @@ describe("advisor", () => {
 					streaming: false,
 					aborting: false,
 					terminalAnswerNoQueuedWork: true,
+					terminalUnwindActive: true,
 					lateConcern: "steer",
 				}),
 			).toBe("preserve");
