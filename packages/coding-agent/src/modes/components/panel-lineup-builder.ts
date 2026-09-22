@@ -42,7 +42,12 @@ import {
 } from "../../panel/types";
 import type { ConfiguredThinkingLevel } from "@oh-my-pi/pi-tui/thinking";
 import { getSelectListTheme, theme } from "@oh-my-pi/pi-tui/theme";
-import { buildBrowserItems, ModelBrowser, type ModelBrowserItem, sortModelItems } from "@oh-my-pi/pi-tui/overlays/model-browser";
+import {
+	buildBrowserItems,
+	ModelBrowser,
+	type ModelBrowserItem,
+	sortModelItems,
+} from "@oh-my-pi/pi-tui/overlays/model-browser";
 import {
 	bottomBorder,
 	divider,
