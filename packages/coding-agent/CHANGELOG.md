@@ -10,6 +10,7 @@
 - Added opt-in `settings.autoRestartOnUpdate` so persisted sessions resume after a stable executable replacement.
 - Added saved `/panel` roles with candidate fallbacks, minimum family diversity, frozen lineups, and lineup hashes.
 - Added `tui.tmuxWindowName` to mirror the active session name into tmux and restore the prior name on exit.
+- Added `tui.tmuxWindowNameColor` to tint the session's tmux status entry with its accent color, restoring the window's prior styles on exit.
 - Added `display.showUsageModels` and `display.showZeroUsageMeters` controls for `/usage`.
 - Added `/reload-plugins` to re-import extension modules without restarting omp.
 - Added hard subagent tool containment through agent `restrictTools`, plus per-call eval-agent timeouts and served-model reporting.
