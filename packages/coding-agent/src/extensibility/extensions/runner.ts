@@ -438,6 +438,7 @@ interface ToolRegistrationScope {
 	signal?: AbortSignal;
 	closed: boolean;
 }
+type ToolRegistrationObserver = (tool: RegisteredTool, signal?: AbortSignal) => void | Promise<void>;
 
 export class ExtensionRunner {
 	#uiContext: ExtensionUIContext;
@@ -463,6 +464,8 @@ export class ExtensionRunner {
 	#commandDiagnostics: Array<{ type: string; message: string; path: string }> = [];
 	#toolRegistrationScope = new AsyncLocalStorage<ToolRegistrationScope>();
 	#toolRegistrationBarrier: Promise<void> | undefined;
+	#toolRegistrationObservers = new Set<ToolRegistrationObserver>();
+	#toolRegistrationUnsubscribers = new Map<ToolRegistrationObserver, () => void>();
 	#initialized = false;
 	/**
 	 * Buffer for `credential_disabled` events received via {@link emitCredentialDisabled}
@@ -717,74 +720,10 @@ export class ExtensionRunner {
 		this.#mode = mode;
 		this.#initialized = true;
 
-		// Re-initialize (e.g. a mode switch rewiring UI/runtime actions) must not
-		// accumulate duplicate global registrations — drop the prior generation before
-		// installing this one's trampolines.
-		this.disposeFileFallbacks();
-		for (const ext of this.extensions) {
-			// Nothing registered by this extension means no trampoline, so a host with
-			// no fallback-registering extension leaves the seam genuinely empty and
-			// `hasFileWriteFallback()`/`hasFileDeleteFallback()` false — the invariant
-			// the whole feature rests on. Each seam is checked separately, so an
-			// extension that only brokers writes never appears in the delete registry.
-			if (ext.fileWriteFallbackHandlers.length === 0 && ext.fileDeleteFallbackHandlers.length === 0) continue;
-			// One trampoline per extension per seam, not per handler: the list is walked
-			// at mutation time so a handler this extension adds later still takes effect,
-			// and `createContext()` takes no extension argument, so within one invocation
-			// a single context is all any of this extension's handlers would have
-			// received anyway.
-			//
-			// The context is built PER INVOCATION rather than captured here, matching
-			// every other dispatch site. `createContext()` materializes `cwd` and
-			// `hasUI` as values, so a trampoline holding one context for the life of the
-			// session would keep handing handlers the workspace this runner initialized
-			// in — wrong the moment `SessionManager.moveTo()` relocates the session
-			// (`/move`), and a handler that scopes or prompts against `ctx.cwd` would
-			// then allow the old workspace and deny the new one. A denied mutation is a
-			// rare path, so the extra object costs nothing that matters.
-			//
-			// Isolation is per HANDLER, not per extension. The registry only sees one
-			// trampoline per extension, so a throw escaping this loop would advance the
-			// registry to the NEXT extension and skip every later handler this one
-			// registered — breaking both the documented "a throwing handler is skipped"
-			// contract and registration order for a backup-handler setup.
-			if (ext.fileWriteFallbackHandlers.length > 0) {
-				this.#fileFallbackDisposers.push(
-					addFileWriteFallback(async req => {
-						const ctx = this.createContext();
-						for (const handler of ext.fileWriteFallbackHandlers) {
-							try {
-								if (await handler(req, ctx)) return true;
-							} catch (error) {
-								logger.warn("Extension file write fallback handler threw; trying next handler", {
-									extension: ext.path,
-									error: error instanceof Error ? error.message : String(error),
-								});
-							}
-						}
-						return false;
-					}),
-				);
-			}
-			if (ext.fileDeleteFallbackHandlers.length > 0) {
-				this.#fileFallbackDisposers.push(
-					addFileDeleteFallback(async req => {
-						const ctx = this.createContext();
-						for (const handler of ext.fileDeleteFallbackHandlers) {
-							try {
-								if (await handler(req, ctx)) return true;
-							} catch (error) {
-								logger.warn("Extension file delete fallback handler threw; trying next handler", {
-									extension: ext.path,
-									error: error instanceof Error ? error.message : String(error),
-								});
-							}
-						}
-						return false;
-					}),
-				);
-			}
-		}
+		// Re-initialize (for example, a mode switch rewiring runtime actions) must not
+		// accumulate process-wide registrations. Reload uses the same path after
+		// replacing the extension set.
+		this.#installFileFallbacks();
 
 		// Drain events buffered by emitCredentialDisabled() before initialize ran. The
 		// spread adds the `type` discriminator — `event` is the pi-ai shape (no `type`).
@@ -901,6 +840,102 @@ export class ExtensionRunner {
 		return this.extensions.map(e => e.path);
 	}
 
+	/**
+	 * Supplies fresh `Extension` objects for {@link reloadExtensions}. Set by
+	 * whoever loaded the extensions in the first place, because only that caller
+	 * knows the paths, cwd and event bus this session was built with; the runner
+	 * receives an already-bound set and cannot reconstruct those inputs.
+	 */
+	#extensionReloader?: () => Promise<{ extensions: Extension[]; errors: Array<{ path: string; error: string }> }>;
+
+	setExtensionReloader(
+		reloader: () => Promise<{ extensions: Extension[]; errors: Array<{ path: string; error: string }> }>,
+	): void {
+		this.#extensionReloader = reloader;
+	}
+
+	/**
+	 * Re-import every extension module and swap the running set, without
+	 * restarting the session.
+	 *
+	 * Module identity was never the obstacle: the import specifier already
+	 * carries a monotonic `?mtime=` tag, so a second import compiles from disk
+	 * rather than returning the cached module. What was missing is that nothing
+	 * re-entered the load path and nothing tore the old registrations down.
+	 *
+	 * Order matters:
+	 *
+	 *  1. `session_shutdown` lets extensions release what they own — file
+	 *     handles, sockets, child processes. From an extension's side this IS a
+	 *     shutdown: that instance never runs again.
+	 *  2. Managed timers and process-wide file fallback registrations are cleared
+	 *     unconditionally, including when a teardown handler throws. Otherwise
+	 *     the old instance can keep acting beside its replacement.
+	 *  3. The new set is swapped in place (see {@link replaceExtensions}) and its
+	 *     file fallbacks are installed.
+	 *  4. `session_start` is re-emitted, because extensions do their
+	 *     per-session registration there. Without it the new modules are loaded
+	 *     but inert, which looks exactly like the reload did nothing.
+	 *
+	 * A module that fails to import is reported in `errors` and is absent from
+	 * the new set; the others still load. A syntax error in one extension while
+	 * editing should not take the rest of the session's extensions down.
+	 */
+	async reloadExtensions(): Promise<{ loaded: number; errors: Array<{ path: string; error: string }> } | null> {
+		const reloader = this.#extensionReloader;
+		if (!reloader) return null;
+
+		try {
+			if (this.hasHandlers("session_shutdown")) {
+				// `reason: "reload"` so handlers can tell this apart from the
+				// session actually ending. An extension that announces the end
+				// of a session to something outside the process would otherwise
+				// report a shutdown that did not happen, seconds before its
+				// replacement announces a start.
+				await this.emit({ type: "session_shutdown", reason: "reload" });
+			}
+		} catch {
+			// A hung or throwing teardown handler must not strand the session on
+			// the old code. The timer sweep below still runs.
+		}
+		this.clearManagedTimers();
+		this.disposeFileFallbacks();
+
+		const result = await reloader();
+		this.replaceExtensions(result.extensions);
+		this.#installFileFallbacks();
+		await this.#refreshRegisteredTools();
+		await this.emit({ type: "session_start" });
+		return { loaded: result.extensions.length, errors: result.errors };
+	}
+
+	/**
+	 * Replace the loaded extension set in place.
+	 *
+	 * Mutates the existing array rather than rebinding it: every dispatch site
+	 * in this class iterates `this.extensions` live, and the runner reference is
+	 * handed to the session, mode controllers and the tool registry at startup.
+	 * Swapping the array itself would leave all of those pointing at the old
+	 * set, so the reload would appear to work and change nothing.
+	 */
+	replaceExtensions(next: readonly Extension[]): void {
+		for (const unsubscribe of this.#toolRegistrationUnsubscribers.values()) unsubscribe();
+		this.#toolRegistrationUnsubscribers.clear();
+		this.extensions.length = 0;
+		this.extensions.push(...next);
+		for (const observer of this.#toolRegistrationObservers) {
+			this.#toolRegistrationUnsubscribers.set(observer, this.#bindToolRegistrationObserver(observer));
+		}
+	}
+
+	async #refreshRegisteredTools(): Promise<void> {
+		for (const tool of this.getAllRegisteredTools()) {
+			for (const observer of this.#toolRegistrationObservers) {
+				await observer(tool, AbortSignal.timeout(extensionHandlerTimeoutMs));
+			}
+		}
+	}
+
 	/** Get all registered tools from all extensions. */
 	getAllRegisteredTools(): RegisteredTool[] {
 		const tools: RegisteredTool[] = [];
@@ -926,7 +961,17 @@ export class ExtensionRunner {
 	 * promises are drained before the lifecycle handler that registered them
 	 * completes, keeping the model tool snapshot and system prompt coherent.
 	 */
-	onToolRegistered(listener: (tool: RegisteredTool, signal?: AbortSignal) => void | Promise<void>): () => void {
+	onToolRegistered(listener: ToolRegistrationObserver): () => void {
+		this.#toolRegistrationObservers.add(listener);
+		this.#toolRegistrationUnsubscribers.set(listener, this.#bindToolRegistrationObserver(listener));
+		return () => {
+			this.#toolRegistrationObservers.delete(listener);
+			this.#toolRegistrationUnsubscribers.get(listener)?.();
+			this.#toolRegistrationUnsubscribers.delete(listener);
+		};
+	}
+
+	#bindToolRegistrationObserver(listener: ToolRegistrationObserver): () => void {
 		const subscriptions: Array<{ extension: Extension; listener: ToolRegistrationListener }> = [];
 		for (const extension of this.extensions) {
 			const trackRegistration = (pending: Promise<void>): void => {
@@ -1239,6 +1284,48 @@ export class ExtensionRunner {
 		this.#managedTimers.clearAll();
 	}
 
+	#installFileFallbacks(): void {
+		this.disposeFileFallbacks();
+		for (const ext of this.extensions) {
+			if (ext.fileWriteFallbackHandlers.length > 0) {
+				this.#fileFallbackDisposers.push(
+					addFileWriteFallback(async req => {
+						const ctx = this.createContext();
+						for (const handler of ext.fileWriteFallbackHandlers) {
+							try {
+								if (await handler(req, ctx)) return true;
+							} catch (error) {
+								logger.warn("Extension file write fallback handler threw; trying next handler", {
+									extension: ext.path,
+									error: error instanceof Error ? error.message : String(error),
+								});
+							}
+						}
+						return false;
+					}),
+				);
+			}
+			if (ext.fileDeleteFallbackHandlers.length > 0) {
+				this.#fileFallbackDisposers.push(
+					addFileDeleteFallback(async req => {
+						const ctx = this.createContext();
+						for (const handler of ext.fileDeleteFallbackHandlers) {
+							try {
+								if (await handler(req, ctx)) return true;
+							} catch (error) {
+								logger.warn("Extension file delete fallback handler threw; trying next handler", {
+									extension: ext.path,
+									error: error instanceof Error ? error.message : String(error),
+								});
+							}
+						}
+						return false;
+					}),
+				);
+			}
+		}
+	}
+
 	/**
 	 * Remove every file write and delete fallback this runner installed into the
 	 * process-wide registries. Called on session shutdown (and before reinstalling
@@ -1247,6 +1334,12 @@ export class ExtensionRunner {
 	 */
 	disposeFileFallbacks(): void {
 		for (const dispose of this.#fileFallbackDisposers.splice(0)) dispose();
+	}
+
+	/** Outstanding extension-owned timers. Lets teardown be asserted directly
+	 * instead of by waiting to see whether a stale callback still fires. */
+	get managedTimerCount(): number {
+		return this.#managedTimers.size;
 	}
 
 	createCommandContext(): ExtensionCommandContext {
