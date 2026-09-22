@@ -7,6 +7,16 @@
 - Added intent descriptions to judgment batching
 - Added live progress tracking for judgment batches in the TUI
 - Added `tui.tmuxWindowName` (default off), which renames the enclosing tmux window to the active session name and restores the original name and `automatic-rename` setting on every exit path ([#7850](https://github.com/can1357/oh-my-pi/pull/7850) by [@mvid](https://github.com/mvid)).
+- Added `/reload-config` and opt-in `settings.hotReload` to apply outside configuration edits in live sessions, including safe default-role model rebinds.
+- Added `advisor.lateConcern` (`preserve` or `steer`) so late advisor concerns can wake the agent after a final answer.
+- Added opt-in `tier.autoFastMode` and a blocked fast-mode status for provider refusals, downgrades, and ineligible accounts.
+- Added opt-in `settings.autoRestartOnUpdate` so persisted sessions resume after a stable executable replacement.
+- Added saved `/panel` roles with candidate fallbacks, minimum family diversity, frozen lineups, and lineup hashes.
+- Added `tui.tmuxWindowName` to mirror the active session name into tmux and restore the prior name on exit.
+- Added `tui.tmuxWindowNameColor` to tint the session's tmux status entry with its accent color, restoring the window's prior styles on exit.
+- Added `display.showUsageModels` and `display.showZeroUsageMeters` controls for `/usage`.
+- Added `/reload-plugins` to re-import extension modules without restarting omp.
+- Added hard subagent tool containment through agent `restrictTools`, plus per-call eval-agent timeouts and served-model reporting.
 
 ### Changed
 
