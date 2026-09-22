@@ -130,6 +130,7 @@ import { releaseJudgmentBatches } from "../eval/judgment-batch-bridge";
 import type { EvalPreludeDefinition } from "../eval/preludes";
 import type { PythonResult } from "../eval/py/executor";
 import { WorkPoolRegistry } from "../task/workpool";
+import { type EvalSpeculationStore, streamedEvalCell } from "../eval/speculation/completion-store";
 import type { BashPtyOptions, BashResult } from "../exec/bash-executor";
 import type { TtsrManager } from "../export/ttsr";
 import type { LoadedCustomCommand } from "../extensibility/custom-commands";
@@ -852,6 +853,8 @@ export class AgentSession {
 
 	readonly #streamingEditGuard: StreamingEditGuard;
 	readonly #loopGuards: LoopGuards;
+	/** Speculations launched from partial eval source. Injected; undefined leaves speculation off. */
+	readonly #evalSpeculation: EvalSpeculationStore | undefined;
 	#promptInFlightCount = 0;
 	#abortInProgress = false;
 	/** Submissions accepted by prompt()/promptCustomMessage()/sendCustomMessage() that have not
@@ -1350,6 +1353,7 @@ export class AgentSession {
 		this.tokenRate = new TokenRateMeter(text => this.agent.tokenizer.countTokens(text));
 		this.#reseedTokenRate();
 		this.#codeModeState = config.codeModeState ?? {};
+		this.#evalSpeculation = config.evalSpeculation;
 		this.sessionManager = config.sessionManager;
 		this.settings = config.settings;
 		this.memoryEnabled = config.memoryEnabled ?? true;
@@ -1831,6 +1835,12 @@ export class AgentSession {
 			});
 		}
 		this.agent.setAssistantMessageEventInterceptor((message, assistantMessageEvent) => {
+			const event: AgentEvent = {
+				type: "message_update",
+				message,
+				assistantMessageEvent,
+			};
+			this.#observeEvalSpeculation(event);
 			this.#loopGuards.onAssistantEvent(message, assistantMessageEvent);
 		});
 		// Tool-result hook owns synchronous post-tool actions that must affect the current loop.
@@ -3152,7 +3162,12 @@ export class AgentSession {
 		}
 		// This must happen before event fan-out awaits: streamed tool-call deltas
 		// can otherwise queue validation that a delayed turn-start reset erases.
-		if (event.type === "turn_start") this.#streamingEditGuard.reset();
+		if (event.type === "turn_start") {
+			this.#streamingEditGuard.reset();
+			// Abandon speculations the finished turn never claimed: each one is a
+			// billable request that no longer has a caller.
+			this.#evalSpeculation?.reset();
+		}
 		// Step the mid-run todo counter synchronously, BEFORE any await in this
 		// handler. The agent loop's next-turn `getAsideMessages` poll can run
 		// before queued microtasks drain, so `#takeMidRunTodoNudge` MUST see the
@@ -5667,6 +5682,21 @@ export class AgentSession {
 	/** Current Code Mode `tool_namespaces_info` snapshot, or `undefined` when inactive. */
 	get codeModeNamespacesInfo(): unknown {
 		return this.#codeModeState.namespacesInfo;
+	}
+
+	/**
+	 * Launch speculatable calls found in a streamed eval cell.
+	 *
+	 * The store is supplied by the session's owner rather than built here: it
+	 * needs a `ToolSession` to dispatch through, which this class is not, and
+	 * importing the completion bridge for one call would pull an omptype-heavy
+	 * module into this file's type graph for no reason.
+	 */
+	#observeEvalSpeculation(event: AgentEvent): void {
+		const speculation = this.#evalSpeculation;
+		if (!speculation) return;
+		const cell = streamedEvalCell(event);
+		if (cell) speculation.observe(cell.code, cell.language);
 	}
 
 	/** Selects enabled tools, ignoring names absent from the registry. */

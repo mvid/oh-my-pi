@@ -28,6 +28,7 @@ import type { Settings, SkillsSettings } from "../config/settings";
 import type { CursorMcpResourceAdapter } from "../cursor";
 import type { RawSseDebugBuffer } from "@oh-my-pi/pi-tui/apps/debug/raw-sse-buffer";
 import type { EvalPreludeDefinition } from "../eval/preludes";
+import type { EvalSpeculationStore } from "../eval/speculation/completion-store";
 import type { TtsrManager } from "../export/ttsr";
 import type { LoadedCustomCommand } from "../extensibility/custom-commands";
 import type { CustomTool } from "../extensibility/custom-tools/types";
@@ -146,6 +147,12 @@ export interface AgentSessionConfig {
 	agent: Agent;
 	/** Shared with the provider stream wrapper: current Codex Code Mode tool exposure snapshot for turn metadata. */
 	codeModeState?: { namespacesInfo?: unknown };
+	/**
+	 * Speculative eval tool-call store. Owned by the caller because launching a
+	 * speculation needs a `ToolSession`, which this session is not. Omitted
+	 * leaves speculation off for the session.
+	 */
+	evalSpeculation?: EvalSpeculationStore;
 	sessionManager: SessionManager;
 	settings: Settings;
 	/**
