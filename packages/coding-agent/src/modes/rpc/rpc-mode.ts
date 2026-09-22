@@ -1103,6 +1103,7 @@ export async function runRpcMode(session: AgentSession, options: RpcModeOptions 
 		const projectPath = await resolveActiveProjectRegistryPath(cwd);
 		clearPluginRootsAndCaches(projectPath ? [projectPath] : undefined);
 		await session.refreshSkillsAndCommands();
+		await session.extensionRunner?.reloadExtensions();
 		await emitAvailableCommandsUpdate();
 	};
 	const emitAvailableCommandsUpdate = async () => {
