@@ -148,11 +148,11 @@ describe("runEvalAgent", () => {
 			getSessionFile: () => null,
 		} as unknown as ToolSession;
 
-		await runEvalAgent({ prompt: "default", agent: "task" }, { session });
-		await runEvalAgent({ prompt: "bounded", agent: "task", timeout: 5 }, { session });
-		await runEvalAgent({ prompt: "tiny", agent: "task", timeout: 0.0001 }, { session });
-		await runEvalAgent({ prompt: "disabled", agent: "task", timeout: 0 }, { session });
-		await runEvalAgent({ prompt: "routed", agent: "task", model: "provider/model:high" }, { session });
+		await runEvalAgentAndWait({ prompt: "default", agent: "task" }, { session });
+		await runEvalAgentAndWait({ prompt: "bounded", agent: "task", timeout: 5 }, { session });
+		await runEvalAgentAndWait({ prompt: "tiny", agent: "task", timeout: 0.0001 }, { session });
+		await runEvalAgentAndWait({ prompt: "disabled", agent: "task", timeout: 0 }, { session });
+		await runEvalAgentAndWait({ prompt: "routed", agent: "task", model: "provider/model:high" }, { session });
 
 		expect(runSubprocessSpy.mock.calls[0]?.[0].maxRuntimeMs).toBeUndefined();
 		expect(runSubprocessSpy.mock.calls[1]?.[0].maxRuntimeMs).toBe(5000);
