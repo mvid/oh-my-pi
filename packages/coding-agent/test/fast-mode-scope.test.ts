@@ -60,11 +60,13 @@ describe("/fast targets the current model's service-tier family", () => {
 			initialState: { model, systemPrompt: ["Test"], tools: [], messages: [] },
 			streamFn,
 		});
+		authStorage.close();
 		authStorage = await AuthStorage.create(
 			path.join(tempDir.path(), "testauth.db"),
 			usageReports ? { fetchUsageReports: async () => usageReports } : {},
 		);
 		authStorage.setRuntimeApiKey(model.provider, "token");
+		modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
 		session = new AgentSession({
 			agent,
 			sessionManager: SessionManager.inMemory(),
@@ -497,7 +499,6 @@ describe("/fast targets the current model's service-tier family", () => {
 				releaseHook.resolve();
 			}
 		});
-
 
 		it("keeps a manual rejection distinct when fast mode is turned off before completion", async () => {
 			const model = getBundledModel("anthropic", "claude-sonnet-4-5");
