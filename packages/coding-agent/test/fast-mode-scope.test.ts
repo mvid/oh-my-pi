@@ -492,6 +492,8 @@ describe("/fast targets the current model's service-tier family", () => {
 				releaseHook.resolve();
 			}
 		});
+
+
 		it("keeps a manual rejection distinct when fast mode is turned off before completion", async () => {
 			const model = getBundledModel("anthropic", "claude-sonnet-4-5");
 			if (!model) throw new Error("Expected bundled claude-sonnet-4-5 model to exist");
@@ -547,6 +549,86 @@ describe("/fast targets the current model's service-tier family", () => {
 
 			expect(notices).toEqual(["Priority/fast mode was rejected for this request and retried without it."]);
 			expect(session.serviceTierByFamily).toEqual({});
+		});
+
+		function creditlessReport(): UsageReport {
+			return {
+				provider: "anthropic",
+				fetchedAt: Date.now(),
+				limits: [],
+				priorityEntitlement: { available: false, reason: "usage credits are disabled" },
+			};
+		}
+
+		async function createEntitlementSession(): Promise<{
+			model: Model<Api>;
+			session: AgentSession;
+			sentTiers: Array<ServiceTier | undefined>;
+		}> {
+			const model = getBundledModel("anthropic", "claude-sonnet-4-5");
+			if (!model) throw new Error("Expected bundled claude-sonnet-4-5 model to exist");
+			const mock = createMockModel({ responses: [{ content: ["Done"] }, { content: ["Done"] }] });
+			const sentTiers: Array<ServiceTier | undefined> = [];
+			const session = await createSessionForModel(
+				model,
+				Settings.isolated({
+					"tier.autoFastMode": true,
+					"tier.autoFastModeDurationMinutes": 20,
+					"compaction.enabled": false,
+				}),
+				(streamModel, context, options) => {
+					sentTiers.push(options?.serviceTier);
+					return mock.stream(streamModel, context, options);
+				},
+				undefined,
+				[creditlessReport()],
+			);
+			// The status-line poll is what populates the entitlement snapshot.
+			await session.fetchUsageReports();
+			return { model, session, sentTiers };
+		}
+
+		it("skips the auto lease when the account cannot use priority", async () => {
+			const { session, sentTiers } = await createEntitlementSession();
+
+			await session.prompt("Respond now");
+			await session.waitForIdle();
+
+			expect(sentTiers).toEqual([undefined]);
+			// Intent is still on, so the state reports blocked (red icon) rather
+			// than off, which would read as "nobody asked for priority".
+			expect(session.fastModeState()).toBe("blocked");
+			expect(session.isFastModeActive()).toBe(false);
+		});
+
+		it("keeps the auto lease on another family after falling back off a blocked one", async () => {
+			// Anthropic reports the entitlement per account, so it must not leak onto
+			// the OpenAI-family model a fallback chain lands on.
+			const model = getBundledModel("openai-codex", "gpt-5.6-terra");
+			if (!model) throw new Error("Expected bundled gpt-5.6-terra model to exist");
+			const mock = createMockModel({ responses: [{ content: ["Done"] }] });
+			const sentTiers: Array<ServiceTier | undefined> = [];
+			const session = await createSessionForModel(
+				model,
+				Settings.isolated({
+					"tier.autoFastMode": true,
+					"tier.autoFastModeDurationMinutes": 20,
+					"compaction.enabled": false,
+				}),
+				(streamModel, context, options) => {
+					sentTiers.push(options?.serviceTier);
+					return mock.stream(streamModel, context, options);
+				},
+				undefined,
+				[creditlessReport()],
+			);
+			await session.fetchUsageReports();
+
+			await session.prompt("Respond now");
+			await session.waitForIdle();
+
+			expect(sentTiers).toEqual(["priority"]);
+			expect(session.fastModeState()).toBe("active");
 		});
 	});
 });
