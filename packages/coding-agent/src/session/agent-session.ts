@@ -455,6 +455,8 @@ import {
 	cfgSkillful,
 	cfgTierAdvisor,
 	cfgTierAnthropic,
+	cfgTierAutoFastMode,
+	cfgTierAutoFastModeDurationMinutes,
 	cfgTierGoogle,
 	cfgTierOpenai,
 	cfgProvidersAnthropicSlowMode,
@@ -6957,7 +6959,6 @@ export class AgentSession implements SettingsScope {
 			this.#toolChoiceQueue.removeByLabel("plan-mode-decision");
 		}
 
-
 		// If streaming, queue via steer()/followUp()/aside based on option
 		if (this.isStreaming) {
 			const streamingBehavior = options?.streamingBehavior;
@@ -9474,7 +9475,7 @@ export class AgentSession implements SettingsScope {
 	/** True while a main-session user-activity lease would supply priority for `model`. */
 	#autoPriorityLeaseLive(model: Model): boolean {
 		if (
-			!this.settings.get("tier.autoFastMode") ||
+			!cfgTierAutoFastMode.get(this.settings) ||
 			this.#autoFastModeSuppressed ||
 			this.#lastUserPromptAt === undefined ||
 			!serviceTierFamily(model) ||
@@ -9482,7 +9483,7 @@ export class AgentSession implements SettingsScope {
 		) {
 			return false;
 		}
-		const autoFastModeActivityWindowMs = this.settings.get("tier.autoFastModeDurationMinutes") * 60 * 1000;
+		const autoFastModeActivityWindowMs = cfgTierAutoFastModeDurationMinutes.get(this.settings) * 60 * 1000;
 		return Date.now() - this.#lastUserPromptAt < autoFastModeActivityWindowMs;
 	}
 
