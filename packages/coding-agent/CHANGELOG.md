@@ -13,6 +13,11 @@
 - Added `tui.tmuxWindowName` (default off), which renames the enclosing tmux window to the active session name and restores the original name and `automatic-rename` setting on every exit path ([#7850](https://github.com/can1357/oh-my-pi/pull/7850) by [@mvid](https://github.com/mvid)).
 - Agent frontmatter `restrictTools` provides a hard tool allowlist for subagents and disables MCP, extensions, and custom tools.
 - Eval `agent()` calls can set a per-call wall-clock timeout, and handle results report the served model and canonical model family.
+- Agent frontmatter `restrictTools` provides a hard tool allowlist for subagents and disables MCP, extensions, and custom tools.
+- Eval `agent()` calls can set a per-call wall-clock timeout, and handle results report the served model and canonical model family.
+- Panel members accept a ranked candidate list, so a seat falls through to the next model when its primary is unavailable and records which candidate served.
+- Panel roles accept a `minFamilies` floor on distinct resolved model families, so a lineup that collapses onto fewer lineages than required never dispatches.
+- Panel runs now carry a `lineupHash` naming the served routes and the policy that admitted them, and extension packages can resolve rosters through `resolvePanelLineup`.
 - Added `injectV1: false` option to `openai-models-list` discovery to fetch the model list from `{baseUrl}/models` without injecting `/v1`, for gateways that root their OpenAI-compatible surface at a versioned URL (e.g. `https://api.opper.ai/v3/compat`) where the `/v1`-injected endpoint returns only a small subset.
 - Added provider-reported credits and concrete routed-model counts to `/session` statistics ([#8590](https://github.com/can1357/oh-my-pi/pull/8590) by [@will-bogusz](https://github.com/will-bogusz)).
 - Added `CLINE_API_KEY` to the CLI environment help for native ClinePass subscription inference ([#7863](https://github.com/can1357/oh-my-pi/pull/7863) by [@will-bogusz](https://github.com/will-bogusz)).
