@@ -13,6 +13,7 @@ import { shortenPath } from "@oh-my-pi/pi-tui/render/render-utils";
 import {
 	modelSelectionInheritsSessionModel,
 	normalizeModelPatternList,
+	resolveAgentModelPatterns,
 	resolveAgentModelSelection,
 	resolveConfiguredModelPatterns,
 	resolveModelOverride,
@@ -408,7 +409,7 @@ function resolvePanelSubagentPolicy(request: StructuredSubagentRequest): Effecti
 		// Panel definitions are already capability attenuated. Never inject the
 		// plan-mode prompt or tool mutation just because the parent is planning.
 		effectiveAgent: agent,
-		modelOverride: resolveConfiguredModelPatterns({
+		modelOverride: resolveAgentModelPatterns({
 			settingsOverride: request.model,
 			agentModel: agent.model,
 			settings: request.session.settings,
@@ -656,6 +657,7 @@ async function applySpawnHook(
 	request: StructuredSubagentRequest,
 	policy: EffectiveSubagentPolicy,
 ): Promise<EffectiveSubagentPolicy> {
+	if (request.invocationKind === "panel") return policy;
 	const emit = request.session.emitBeforeSubagentSpawn;
 	if (!emit) return policy;
 	const spawnKey =
