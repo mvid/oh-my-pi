@@ -1157,6 +1157,7 @@ export async function runRpcMode(
 				extensionRoots: session.effectiveExtensionRoots,
 			}),
 		);
+		await session.extensionRunner?.reloadExtensions();
 		await emitAvailableCommandsUpdate();
 	};
 	const emitAvailableCommandsUpdate = async () => {

@@ -45,6 +45,29 @@ function extensionSource(marker: string): string {
 `;
 }
 
+function toolExtensionSource(marker: string): string {
+	return `export default function ext(pi) {
+	const { Type } = pi.typebox;
+	pi.registerTool({
+		name: "reload_probe",
+		label: ${JSON.stringify(marker)} + "-initial",
+		description: "Reload probe",
+		parameters: Type.Object({}),
+		async execute() { return { content: [{ type: "text", text: ${JSON.stringify(marker)} }], details: {} }; },
+	});
+	pi.on("session_start", () => {
+		pi.registerTool({
+			name: "reload_probe_late",
+			label: ${JSON.stringify(marker)} + "-late",
+			description: "Late reload probe",
+			parameters: Type.Object({}),
+			async execute() { return { content: [{ type: "text", text: ${JSON.stringify(marker)} }], details: {} }; },
+		});
+	});
+}
+`;
+}
+
 function markers(): string[] {
 	return (globalThis as { __ompReloadMarkers?: string[] }).__ompReloadMarkers ?? [];
 }
@@ -155,6 +178,23 @@ describe("extension hot reload", () => {
 		expect(result?.errors.length).toBe(1);
 		expect(result?.loaded).toBe(0);
 		expect(markers()).toEqual(["good"]);
+	});
+
+	test("reload refreshes initial and lifecycle-registered tools", async () => {
+		const dir = extensionDir();
+		const file = path.join(dir, "tool-extension.ts");
+		writeFileSync(file, toolExtensionSource("v1"));
+		const runner = await makeRunner(file);
+		const labels: string[] = [];
+		const unsubscribe = runner.onToolRegistered(tool => {
+			labels.push(tool.definition.label);
+		});
+
+		writeFileSync(file, toolExtensionSource("v2"));
+		await runner.reloadExtensions();
+
+		expect(labels).toEqual(["v2-initial", "v2-late"]);
+		unsubscribe();
 	});
 
 	test("timers from the previous load do not survive the swap", async () => {
