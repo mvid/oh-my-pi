@@ -45,6 +45,7 @@ import { isInsideTerminalMultiplexer } from "@oh-my-pi/pi-tui/terminal-capabilit
 import {
 	$env,
 	adjustHsv,
+	formatDuration,
 	formatNumber,
 	getProjectDir,
 	hsvToRgb,
@@ -115,6 +116,7 @@ import planFilenamePrompt from "../prompts/system/plan-filename.md" with { type:
 import planModeApprovedPrompt from "../prompts/system/plan-mode-approved.md" with { type: "text" };
 import planModeCompactInstructionsPrompt from "../prompts/system/plan-mode-compact-instructions.md" with { type: "text" };
 import type { AgentHubRegistry } from "@oh-my-pi/pi-tui/overlays/agent-hub-types";
+import { formatCost } from "@oh-my-pi/pi-tui/overlays/agent-hub-renderer";
 import { AgentRegistry, MAIN_AGENT_ID } from "../registry/agent-registry";
 import {
 	type AgentSession,
@@ -147,6 +149,7 @@ import { isMCPToolName } from "../tools/builtin-names";
 import type { LspStartupServerInfo } from "../tools";
 import { normalizeLocalScheme, resolveToCwd } from "../tools/path-utils";
 import { StreamPublisher } from "../stream/publisher";
+import { newRecordingPath, SessionRecorder } from "../stream/recording";
 import { StreamRedactor } from "../stream/redactor";
 import {
 	FEED_MODEL_BADGE_WIDTH,
@@ -513,20 +516,28 @@ class JudgmentBatchProgressHud implements Component {
 
 	#renderRow(progress: JudgmentBatchProgress, width: number): string {
 		const countText = `${progress.done}/${progress.total}`;
+		// Zero cost means unpriced (local/native without catalog pricing), not free — omit rather than show $0.
+		const costText = progress.cost > 0 ? ` · ${formatCost(progress.cost)}` : "";
 		const failedText = progress.failed > 0 ? ` · ${progress.failed} failed` : "";
 		const compactFailedText = progress.failed > 0 ? ` +${progress.failed}!` : "";
 		let failure = failedText;
 		if (
 			failure &&
-			visibleWidth(countText) + visibleWidth(failure) + JUDGMENT_BATCH_PROGRESS_MIN_BAR_WIDTH + 1 > width &&
-			visibleWidth(countText) + visibleWidth(compactFailedText) <= width
+			visibleWidth(countText) +
+				visibleWidth(costText) +
+				visibleWidth(failure) +
+				JUDGMENT_BATCH_PROGRESS_MIN_BAR_WIDTH +
+				1 >
+				width &&
+			visibleWidth(countText) + visibleWidth(costText) + visibleWidth(compactFailedText) <= width
 		) {
 			failure = compactFailedText;
 		}
 
 		const styledCount = theme.bold(theme.fg("text", countText));
+		const styledCost = costText ? theme.fg("dim", costText) : "";
 		const styledFailure = failure ? theme.fg("warning", failure) : "";
-		let tail = `${styledCount}${styledFailure}`;
+		let tail = `${styledCount}${styledCost}${styledFailure}`;
 		let remaining = width - visibleWidth(tail);
 		if (remaining > 1) {
 			const barWidth = Math.min(JUDGMENT_BATCH_PROGRESS_BAR_WIDTH, remaining - 1);
@@ -998,6 +1009,8 @@ export class InteractiveMode implements InteractiveModeContext {
 	collabHost?: CollabHost;
 	collabGuest?: CollabGuestLink;
 	#streamPublisher: StreamPublisher | undefined;
+	#recorder: SessionRecorder | undefined;
+	#recorderStarting = false;
 
 	#pendingCommandOutput: Component[] = [];
 	#pendingCommandOutputSessionId: string | undefined;
@@ -5642,6 +5655,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#appearanceRefreshRequest = undefined;
 		this.#streamPublisher?.dispose();
 		this.#streamPublisher = undefined;
+		void this.#recorder?.stop();
+		this.#recorder = undefined;
 		// Last chance to refresh the startup status placeholder for the next launch.
 		this.#persistComposerStatus();
 		if (this.loadingAnimation) {
@@ -5819,6 +5834,8 @@ export class InteractiveMode implements InteractiveModeContext {
 		try {
 			this.#streamPublisher?.dispose();
 			this.#streamPublisher = undefined;
+			await this.#recorder?.stop();
+			this.#recorder = undefined;
 			// Guests get goodbye and the registry entry disappears before the
 			// session is disposed, under the same still-closing progress notice.
 			await this.collabController.shutdown("host exited");
@@ -6567,6 +6584,39 @@ export class InteractiveMode implements InteractiveModeContext {
 				this.ui.requestRender();
 			},
 		});
+	}
+
+	/** Start a `/record` screen capture, or stop the running one and report where it was saved. */
+	async toggleRecording(): Promise<void> {
+		const active = this.#recorder;
+		if (active) {
+			this.#recorder = undefined;
+			const elapsed = active.elapsedMs;
+			await active.stop();
+			this.statusLine.setRecording(false);
+			this.showStatus(
+				`Saved ${formatDuration(elapsed)} recording to ${active.path} · replay: omp play · share: omp clip`,
+			);
+			return;
+		}
+		if (this.#recorderStarting) return;
+		this.#recorderStarting = true;
+		const cwd = this.sessionManager.getCwd();
+		try {
+			this.#recorder = await SessionRecorder.start({
+				tui: this.ui,
+				redactor: await StreamRedactor.load(cwd, this.settings.get("stream.redactPatterns")),
+				title: this.sessionManager.getSessionName() || path.basename(cwd),
+				path: newRecordingPath(this.sessionManager.getSessionId()),
+			});
+		} catch (error) {
+			this.showError(`Could not start recording: ${error instanceof Error ? error.message : String(error)}`);
+			return;
+		} finally {
+			this.#recorderStarting = false;
+		}
+		this.statusLine.setRecording(true);
+		this.showStatus(`Recording to ${this.#recorder.path} · /record again to stop`);
 	}
 
 	/** Start or stop the Codex-backed realtime voice surface. */

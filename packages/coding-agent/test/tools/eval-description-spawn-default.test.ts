@@ -7,6 +7,8 @@ describe("eval tool description", () => {
 
 		expect(description).toContain('agent(prompt, agent?="fact-finder"');
 		expect(description).toContain("Allowed agents: `fact-finder`, `oracle`.");
+		expect(description).toContain("timeout?=None");
+		expect(description).toContain("id, agent, model");
 	});
 
 	it("omits agent() when spawning is disabled", () => {

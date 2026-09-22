@@ -151,10 +151,14 @@ if (!globalThis.__omp_js_prelude_loaded__) {
 	}
 
 	class AgentHandle extends EvalHandle {
-		constructor(id, agentName, schema) {
+		constructor(id, agentName, schema, details) {
 			super("agent", id, schema);
 			this.agent = agentName;
 			this.handle = `agent://${id}`;
+			if (details && typeof details === "object") {
+				if (details.model !== undefined) this.model = details.model;
+				if (details.family !== undefined) this.family = details.family;
+			}
 		}
 
 		toString() {
@@ -438,12 +442,12 @@ if (!globalThis.__omp_js_prelude_loaded__) {
 				"agent",
 				opts,
 				rest,
-				["agent", "label", "schema", "isolated", "apply", "merge", "schemaMode", "tools"],
-				"{ agent, label, schema, schemaMode, isolated, apply, merge, tools }",
+				["agent", "model", "label", "schema", "isolated", "apply", "merge", "schemaMode", "timeout", "tools"],
+				"{ agent, model, label, schema, schemaMode, isolated, apply, merge, timeout, tools }",
 			);
 			const result = await globalThis.__omp_call_tool__("__agent__", { prompt, ...options });
 			if (!result || typeof result.id !== "string") throw new Error("agent() did not return a handle");
-			return new AgentHandle(result.id, result.agent, options.schema);
+			return new AgentHandle(result.id, result.agent, options.schema, result.details);
 		})();
 		return new PendingHandle(promise);
 	};
