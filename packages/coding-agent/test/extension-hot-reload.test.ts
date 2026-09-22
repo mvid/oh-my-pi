@@ -92,13 +92,7 @@ async function makeRunner(file: string) {
 	const events = new EventBus();
 	const loaded = await loadExtensions([file], cwd, events);
 	expect(loaded.errors).toEqual([]);
-	const runner = new ExtensionRunner(
-		loaded.extensions,
-		loaded.runtime,
-		cwd,
-		SessionManager.inMemory(),
-		modelRegistry,
-	);
+	const runner = new ExtensionRunner(loaded.extensions, loaded.runtime, cwd, SessionManager.inMemory(), modelRegistry);
 	runner.setExtensionReloader(() => loadExtensions([file], cwd, events));
 	return runner;
 }

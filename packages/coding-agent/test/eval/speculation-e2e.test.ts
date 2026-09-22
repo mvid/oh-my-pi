@@ -12,7 +12,10 @@ import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { retainCompletionHandle } from "@oh-my-pi/pi-coding-agent/eval/completion-bridge";
-import { EvalSpeculationStore, registerEvalSpeculation } from "@oh-my-pi/pi-coding-agent/eval/speculation/completion-store";
+import {
+	EvalSpeculationStore,
+	registerEvalSpeculation,
+} from "@oh-my-pi/pi-coding-agent/eval/speculation/completion-store";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { convertToLlm } from "@oh-my-pi/pi-coding-agent/session/messages";
