@@ -101,6 +101,7 @@ import { type AdvisorConfigDeps, AdvisorConfigOverlayComponent } from "@oh-my-pi
 import { createAgentsHubDeps } from "../agents-hub-deps";
 import { getEditorCommand, openInEditor } from "../../utils/external-editor";
 import { collapseSharedUsageReports } from "@oh-my-pi/pi-tui/overlays/usage-display";
+import { filterUsageReportsForDisplay } from "../../utils/usage-display";
 import { limitMatchesActiveAccount } from "../../slash-commands/helpers/active-oauth-account";
 import { AgentHubOverlayComponent } from "@oh-my-pi/pi-tui/overlays/agent-hub";
 import { createAgentHubRuntime } from "../agent-hub-runtime";
@@ -386,7 +387,10 @@ export class SelectorController {
 					this.ctx.session.sessionId,
 				)
 			: undefined;
-		const usageModelSelectors = resolveUsageModelSelectors(reports, this.ctx.settings, next =>
+		const displayReports = filterUsageReportsForDisplay(collapseSharedUsageReports(reports), {
+			showZeroUsageMeters: this.ctx.settings.get("display.showZeroUsageMeters"),
+		});
+		const usageModelSelectors = resolveUsageModelSelectors(displayReports, this.ctx.settings, next =>
 			this.ctx.session.getUsageReportingModelSelectors(next),
 		);
 		const done = () => {
@@ -395,10 +399,10 @@ export class SelectorController {
 			this.ctx.ui.requestRender();
 		};
 		const dashboard = new UsageDashboardComponent({
-			reports,
+			reports: displayReports,
 			renderDetail: width =>
 				renderUsageReports(
-					reports,
+					displayReports,
 					theme,
 					Date.now(),
 					width,
