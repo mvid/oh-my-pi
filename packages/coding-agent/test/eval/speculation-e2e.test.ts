@@ -11,7 +11,8 @@ import { createMockModel, type MockResponse } from "@oh-my-pi/pi-ai/providers/mo
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
-import { EvalSpeculationStore, registerEvalSpeculation } from "@oh-my-pi/pi-coding-agent/eval/speculation";
+import { retainCompletionHandle } from "@oh-my-pi/pi-coding-agent/eval/completion-bridge";
+import { EvalSpeculationStore, registerEvalSpeculation } from "@oh-my-pi/pi-coding-agent/eval/speculation/completion-store";
 import { AgentSession } from "@oh-my-pi/pi-coding-agent/session/agent-session";
 import type { AuthStorage } from "@oh-my-pi/pi-coding-agent/session/auth-storage";
 import { convertToLlm } from "@oh-my-pi/pi-coding-agent/session/messages";
@@ -91,9 +92,14 @@ describe("speculative tool calling through a real session", () => {
 		const store = new EvalSpeculationStore({
 			isEnabled: () => settings.get("eval.speculation.enabled"),
 			maxPerTurn: () => settings.get("eval.speculation.maxPerTurn"),
-			run: (_name, args) => {
+			run: (_name, args, signal) => {
 				speculated.push(args);
-				return Promise.resolve({ text: `${SPECULATED_PREFIX}${String(args.prompt)}` });
+				return Promise.resolve(
+					retainCompletionHandle("spec", { session: toolSession, signal }, async () => ({
+						text: SPECULATED_PREFIX + String(args.prompt),
+						details: { model: "test", structured: false },
+					})),
+				);
 			},
 		});
 		registerEvalSpeculation(toolSession, store);
@@ -148,7 +154,7 @@ describe("speculative tool calling through a real session", () => {
 	// Covers the whole chain: interceptor, arg read, store, and WeakMap binding.
 	it("serves the cell's completion() from the speculation instead of dispatching again", async () => {
 		await build(true);
-		const code = 'const a = await completion("haiku please"); display(a);';
+		const code = 'const a = await completion("haiku please").wait(); display(a);';
 		scriptedResponses = [evalCall(code, "call_spec_2"), stopReply("ok")];
 
 		await session.prompt("run a cell");
@@ -169,7 +175,7 @@ describe("speculative tool calling through a real session", () => {
 		// cell never calls. Only the executed prompt's own result may come back.
 		const code = [
 			'if (false) { await completion("never called"); }',
-			'const a = await completion("actually called");',
+			'const a = await completion("actually called").wait();',
 			"display(a);",
 		].join("\n");
 		scriptedResponses = [evalCall(code, "call_spec_3"), stopReply("ok")];
@@ -193,7 +199,7 @@ describe("speculative tool calling through a real session", () => {
 		// parked literal above stays unclaimed.
 		const code = [
 			'if (false) { await completion("parked but unused"); }',
-			'const a = await completion("con" + "catenated").catch(e => "ERR:" + e);',
+			'const a = await completion("con" + "catenated").wait().catch(e => "ERR:" + e);',
 			"display(a);",
 		].join("\n");
 		scriptedResponses = [evalCall(code, "call_spec_4"), stopReply("ok")];

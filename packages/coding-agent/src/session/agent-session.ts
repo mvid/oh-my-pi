@@ -122,12 +122,8 @@ import { releaseCompletionHandles } from "../eval/completion-bridge";
 import { releaseJudgmentBatches } from "../eval/judgment-batch-bridge";
 import type { EvalPreludeDefinition } from "../eval/preludes";
 import type { PythonResult } from "../eval/py/executor";
-<<<<<<< HEAD
 import { WorkPoolRegistry } from "../task/workpool";
-import type { EvalSpeculationStore } from "../eval/speculation";
-=======
-import { type EvalSpeculationStore, streamedEvalCell } from "../eval/speculation";
->>>>>>> b6e3275d3f (test(eval): cover the streamed-event shape the speculator depends on)
+import { type EvalSpeculationStore, streamedEvalCell } from "../eval/speculation/completion-store";
 import type { BashPtyOptions, BashResult } from "../exec/bash-executor";
 import type { TtsrManager } from "../export/ttsr";
 import type { LoadedCustomCommand } from "../extensibility/custom-commands";

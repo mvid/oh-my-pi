@@ -9,7 +9,7 @@ import {
 	SPECULATED_BRIDGE_TOOL,
 	speculationKey,
 	streamedEvalCell,
-} from "../../src/eval/speculation";
+} from "../../src/eval/speculation/completion-store";
 import type { ToolSession } from "../../src/tools";
 
 /** Prompts recovered from `code`, in source order. */
