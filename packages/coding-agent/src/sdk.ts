@@ -2789,7 +2789,6 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 					const resolved = parseModelPattern(candidate.raw, fallbackCandidates, modelMatchPreferences);
 					if (!resolved.model || !hasModelAuth(resolved.model)) continue;
 					model = resolved.model;
-					modelFromDefaultRole = true;
 					initialRetryFallback = retryFallback;
 					modelFallbackMessage = undefined;
 					if (resolved.explicitThinkingLevel) {

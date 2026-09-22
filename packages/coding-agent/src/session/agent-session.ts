@@ -614,6 +614,9 @@ export class AgentSession {
 	readonly #tools: SessionTools;
 	readonly #prewalk: PrewalkCoordinator;
 
+	/** Newest usage reports, cached by {@link AgentSession.fetchUsageReports}. */
+	#usageReports: UsageReport[] | undefined;
+
 	readonly #providerBoundary: SessionProviderBoundary;
 	#promptTemplates: PromptTemplate[];
 	#slashCommands: FileSlashCommand[];
@@ -10610,7 +10613,10 @@ export class AgentSession {
 		});
 		// Every fresh usage snapshot doubles as the salvage-sweep heartbeat: the
 		// status line calls this every 5 minutes while the TUI is open.
-		if (reports) this.#maybeScheduleResetSweep(reports);
+		if (reports) {
+			this.#usageReports = reports;
+			this.#maybeScheduleResetSweep(reports);
+		}
 		return reports;
 	}
 
