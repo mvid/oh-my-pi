@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
 import type { Api, AssistantMessage, Model, ProviderSessionState, ServiceTier, UsageReport } from "@oh-my-pi/pi-ai";
@@ -23,21 +23,16 @@ describe("/fast targets the current model's service-tier family", () => {
 	let session: AgentSession | undefined;
 	let modelRegistry: ModelRegistry;
 
-	beforeAll(async () => {
+	beforeEach(() => {
 		tempDir = TempDir.createSync("@pi-fast-mode-scope-");
-		authStorage = await AuthStorage.create(path.join(tempDir.path(), "testauth.db"));
-		modelRegistry = new ModelRegistry(authStorage, path.join(tempDir.path(), "models.yml"));
 	});
 
 	afterEach(async () => {
 		await session?.dispose();
 		session = undefined;
-		vi.restoreAllMocks();
-	});
-
-	afterAll(() => {
-		authStorage.close();
+		authStorage?.close();
 		tempDir.removeSync();
+		vi.restoreAllMocks();
 	});
 
 	async function createSession(provider: "anthropic" | "openai", modelId: string): Promise<AgentSession> {
@@ -60,7 +55,7 @@ describe("/fast targets the current model's service-tier family", () => {
 			initialState: { model, systemPrompt: ["Test"], tools: [], messages: [] },
 			streamFn,
 		});
-		authStorage.close();
+
 		authStorage = await AuthStorage.create(
 			path.join(tempDir.path(), "testauth.db"),
 			usageReports ? { fetchUsageReports: async () => usageReports } : {},
