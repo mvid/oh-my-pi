@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "bun:test";
 import * as path from "node:path";
 import { Agent } from "@oh-my-pi/pi-agent-core";
-import type { Api, AssistantMessage, Model, ProviderSessionState, ServiceTier } from "@oh-my-pi/pi-ai";
+import type { Api, AssistantMessage, Model, ProviderSessionState, ServiceTier, UsageReport } from "@oh-my-pi/pi-ai";
 import { createMockModel } from "@oh-my-pi/pi-ai/providers/mock";
 import { AssistantMessageEventStream } from "@oh-my-pi/pi-ai/utils/event-stream";
 import { buildModel } from "@oh-my-pi/pi-catalog/build";
@@ -54,11 +54,16 @@ describe("/fast targets the current model's service-tier family", () => {
 		streamFn?: Agent["streamFn"],
 		agentKind?: "main" | "sub",
 		extensionRunner?: ExtensionRunner,
+		usageReports?: UsageReport[],
 	): Promise<AgentSession> {
 		const agent = new Agent({
 			initialState: { model, systemPrompt: ["Test"], tools: [], messages: [] },
 			streamFn,
 		});
+		authStorage = await AuthStorage.create(
+			path.join(tempDir.path(), "testauth.db"),
+			usageReports ? { fetchUsageReports: async () => usageReports } : {},
+		);
 		authStorage.setRuntimeApiKey(model.provider, "token");
 		session = new AgentSession({
 			agent,
@@ -581,6 +586,7 @@ describe("/fast targets the current model's service-tier family", () => {
 					return mock.stream(streamModel, context, options);
 				},
 				undefined,
+				undefined,
 				[creditlessReport()],
 			);
 			// The status-line poll is what populates the entitlement snapshot.
@@ -619,6 +625,7 @@ describe("/fast targets the current model's service-tier family", () => {
 					sentTiers.push(options?.serviceTier);
 					return mock.stream(streamModel, context, options);
 				},
+				undefined,
 				undefined,
 				[creditlessReport()],
 			);

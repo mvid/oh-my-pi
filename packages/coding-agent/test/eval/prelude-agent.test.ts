@@ -61,19 +61,9 @@ describe("eval js agent() handle", () => {
 		) => Promise<unknown>;
 		const schema = { type: "object", properties: { ok: { type: "boolean" } } };
 
-		await positionalAgent(
-			"scout",
-			"reviewer",
-			undefined,
-			"Legacy",
-			schema,
-			true,
-			false,
-			true,
-			"strict",
-			undefined,
-			["read"],
-		);
+		await positionalAgent("scout", "reviewer", undefined, "Legacy", schema, true, false, true, "strict", undefined, [
+			"read",
+		]);
 
 		expect(seenArgs).toEqual({
 			prompt: "scout",

@@ -643,9 +643,6 @@ export class AgentSession {
 	/** Newest usage reports, cached by {@link AgentSession.fetchUsageReports}. */
 	#usageReports: UsageReport[] | undefined;
 
-	/** Newest usage reports, cached by {@link AgentSession.fetchUsageReports}. */
-	#usageReports: UsageReport[] | undefined;
-
 	readonly #providerBoundary: SessionProviderBoundary;
 	#promptTemplates: PromptTemplate[];
 	#slashCommands: FileSlashCommand[];
@@ -6524,9 +6521,6 @@ export class AgentSession {
 		const promptAttribution = options?.attribution ?? (options?.synthetic ? "agent" : "user");
 		const userInitiated = options?.userInitiated ?? (!options?.synthetic && promptAttribution === "user");
 
-		const promptAttribution = options?.attribution ?? (options?.synthetic ? "agent" : "user");
-		const userInitiated = options?.userInitiated ?? (!options?.synthetic && promptAttribution === "user");
-
 		// Magic keywords (see modes/magic-keywords.ts): append hidden system notices after the
 		// user's message that steer this turn. User-authored prompts only — synthetic /
 		// agent-initiated turns never trigger them.
@@ -6543,7 +6537,6 @@ export class AgentSession {
 			// a reminder continuation this prompt just preempted.
 			this.#toolChoiceQueue.removeByLabel("plan-mode-decision");
 		}
-
 
 		// If streaming, queue via steer()/followUp()/aside based on option
 		if (this.isStreaming) {
@@ -7451,7 +7444,6 @@ export class AgentSession {
 			attribution?: MessageAttribution;
 			userInitiated?: boolean;
 			preprocessed?: { images: ImageContent[] | undefined; descriptionNotice: CustomMessage | undefined };
-			userInitiated?: boolean;
 		},
 	): Promise<void> {
 		const attribution = options?.attribution ?? "user";
