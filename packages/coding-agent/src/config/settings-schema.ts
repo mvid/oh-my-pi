@@ -1177,6 +1177,18 @@ export const SETTINGS_SCHEMA = {
 		},
 	},
 
+	"tui.tmuxWindowNameColor": {
+		type: "boolean",
+		default: false,
+		ui: {
+			tab: "appearance",
+			group: "Display",
+			label: "Tmux Window Accent",
+			description:
+				"Tint this window's tmux status entry with the session accent color, independently of `tui.tmuxWindowName`; the window's prior status styles are restored on exit",
+		},
+	},
+
 	"tui.hyperlinks": {
 		type: "enum",
 		values: ["off", "auto", "always"] as const,

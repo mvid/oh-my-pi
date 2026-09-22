@@ -20,6 +20,16 @@
 - Added provider-supplied model metadata to the `/models` detail line: `new`, `beta`, and `recommended` badges beside the model name, and the upstream description after the context, cost, and perf facts ([#8590](https://github.com/can1357/oh-my-pi/pull/8590) by [@will-bogusz](https://github.com/will-bogusz)).
 - Standalone `CLAUDE.md` files in the project root (and ancestor directories) are now loaded as context, mirroring `AGENTS.md` discovery; config-directory context files still take precedence per scope.
 - Added a `display.showZeroUsageMeters` setting to hide untouched supplemental model and tier quota meters from live usage reports.
+- Added `/reload-config` and opt-in `settings.hotReload` to apply outside configuration edits in live sessions, including safe default-role model rebinds.
+- Added `advisor.lateConcern` (`preserve` or `steer`) so late advisor concerns can wake the agent after a final answer.
+- Added opt-in `tier.autoFastMode` and a blocked fast-mode status for provider refusals, downgrades, and ineligible accounts.
+- Added opt-in `settings.autoRestartOnUpdate` so persisted sessions resume after a stable executable replacement.
+- Added saved `/panel` roles with candidate fallbacks, minimum family diversity, frozen lineups, and lineup hashes.
+- Added `tui.tmuxWindowName` to mirror the active session name into tmux and restore the prior name on exit.
+- Added `tui.tmuxWindowNameColor` to tint the session's tmux status entry with its accent color, restoring the window's prior styles on exit.
+- Added `display.showUsageModels` and `display.showZeroUsageMeters` controls for `/usage`.
+- Added `/reload-plugins` to re-import extension modules without restarting omp.
+- Added hard subagent tool containment through agent `restrictTools`, plus per-call eval-agent timeouts and served-model reporting.
 
 ### Changed
 
