@@ -428,6 +428,31 @@ export const SETTINGS_SCHEMA = {
 			condition: "advisorEnabled",
 		},
 	},
+	"advisor.lateConcern": {
+		type: "enum",
+		values: ["preserve", "steer"] as const,
+		default: "preserve",
+		ui: {
+			tab: "model",
+			group: "Advisor",
+			label: "Late Concern Delivery",
+			description:
+				"How to deliver an advisor 'concern' raised after the agent already finished with a final answer. 'preserve' leaves it as a passive card the next turn picks up (default); 'steer' wakes the agent to act on it immediately, like a blocker. Useful for slow advisors whose review always lands after the turn completes.",
+			options: [
+				{
+					value: "preserve",
+					label: "Preserve",
+					description: "Show a passive card and let the next user turn pick it up (default).",
+				},
+				{
+					value: "steer",
+					label: "Steer Immediately",
+					description: "Wake the agent to act on the concern immediately, like a blocker.",
+				},
+			],
+			condition: "advisorEnabled",
+		},
+	},
 	"advisor.maxNotesPerUpdate": {
 		type: "number",
 		default: ADVISOR_DEFAULT_BUDGET_PER_UPDATE,
