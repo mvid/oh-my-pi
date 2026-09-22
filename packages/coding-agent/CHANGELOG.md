@@ -6,6 +6,7 @@
 
 - Added intent descriptions to judgment batching
 - Added live progress tracking for judgment batches in the TUI
+- Added `tui.tmuxWindowName` (default off), which renames the enclosing tmux window to the active session name and restores the original name and `automatic-rename` setting on every exit path ([#7850](https://github.com/can1357/oh-my-pi/pull/7850) by [@mvid](https://github.com/mvid)).
 
 ### Changed
 
