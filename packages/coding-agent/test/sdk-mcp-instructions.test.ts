@@ -257,12 +257,15 @@ describe("createAgentSession MCP server instructions (deferred UI)", () => {
 			hasUI: true,
 		});
 		try {
-			// Deferred discovery is a real child-process handshake with no
-			// completion signal exposed to this integration harness; fake timers
-			// cannot advance it, so retain the established polling bounds above.
+			// Deferred discovery exposes instructions and mounted routes in separate
+			// prompt rebuilds. Wait for both observable products of the handshake.
 			const deadline = Date.now() + 12_000;
 			let prompt = session.systemPrompt.join("\n");
-			while (!prompt.includes(SERVER_INSTRUCTIONS) && Date.now() < deadline) {
+			const finalVisibleRoute = '- "row_cl" → `xd://mcp__instr_row_cl`';
+			while (
+				(!prompt.includes(SERVER_INSTRUCTIONS) || !prompt.includes(finalVisibleRoute)) &&
+				Date.now() < deadline
+			) {
 				await Bun.sleep(10);
 				prompt = session.systemPrompt.join("\n");
 			}
