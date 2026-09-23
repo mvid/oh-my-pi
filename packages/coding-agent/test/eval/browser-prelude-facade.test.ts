@@ -347,7 +347,7 @@ describe("browser facade Chromium helper E2E", () => {
 					"(async () => { globalThis.__e2eTab = await browser.open({ name: __name__, url: __url__ }); })()",
 					context,
 				);
-				await runInContext('__e2eTab.click("text/Go")', context);
+				await runInContext('__e2eTab.click("#go")', context);
 				const title = await runInContext("__e2eTab.title()", context);
 				expect(typeof title).toBe("string");
 				expect(title).toBe("Clicked");
@@ -371,7 +371,7 @@ describe("browser facade Chromium helper E2E", () => {
 						context,
 					),
 				).toBe("Go");
-				expect(await runInContext('__e2eTab.waitFor("text/Go")', context)).toBe(true);
+				expect(await runInContext('__e2eTab.waitFor("#go")', context)).toBe(true);
 			} finally {
 				await prelude
 					.invoke({ action: "close", name }, { session, toolCallId: `browser-e2e-cleanup-${crypto.randomUUID()}` })
