@@ -627,7 +627,9 @@ export class SessionAdvisors {
 		signal?: AbortSignal,
 	): Promise<void> {
 		const terminalBoundary = willContinue !== true;
-		if (terminalBoundary) this.#terminalUnwindActive = true;
+		const terminalTextBoundary =
+			terminalBoundary && this.#hasTerminalTextAnswerWithoutQueuedWork(messages);
+		if (terminalTextBoundary) this.#terminalUnwindActive = true;
 		// Delivery state follows primary boundaries even when review cadence skips a callback.
 		this.#advisorPrimaryWillContinue = willContinue === true;
 		this.#advisorPrimaryTurnsCompleted++;
@@ -703,13 +705,10 @@ export class SessionAdvisors {
 			// Window closed: deliver everything buffered during flush + catch-up
 			// wait as one merged message (one steer at most, else one card).
 			this.#flushAdvisorBoundaryNotes();
-			// The merge window covers only this callback. With advisor.syncBacklog
-			// off the review drain can still emit after it returns; those late notes
-			// deliver individually through #routeAdvice, and `#terminalUnwindActive`
-			// (held until the next primary turn starts), not the merge window, is what
-			// keeps them from steering finished work — only a blocker or an
-			// agent-end reviewer's concern may still request a continuation.
-			if (!terminalBoundary) this.#terminalUnwindActive = false;
+			// With advisor.syncBacklog=off, the review drain can emit after this
+			// callback returns. Keep the terminal guard until the next real agent
+			// start rather than reopening the steer path in that microtask gap.
+			if (!terminalTextBoundary) this.#terminalUnwindActive = false;
 		}
 	}
 
@@ -1685,9 +1684,10 @@ export class SessionAdvisors {
 	 * has already accepted the note; rejected calls never enter this route and
 	 * receive their specific policy outcome from `AdviseTool`.
 	 */
-	#hasTerminalTextAnswerWithoutQueuedWork(): boolean {
+	#hasTerminalTextAnswerWithoutQueuedWork(
+		messages: readonly AgentMessage[] = this.#host.agent.state.messages,
+	): boolean {
 		if (this.#host.agent.hasQueuedMessages() || this.#host.hasPendingNextTurnMessages()) return false;
-		const messages = this.#host.agent.state.messages;
 		let tail = messages.length - 1;
 		while (tail >= 0 && isAdvisorCard(messages[tail])) tail--;
 		return isTerminalTextAssistantAnswer(messages[tail]);
@@ -1719,7 +1719,8 @@ export class SessionAdvisors {
 			return;
 		}
 		const interrupting = isInterruptingSeverity(severity);
-		const terminalAnswerNoQueuedWork = this.#hasTerminalTextAnswerWithoutQueuedWork();
+		const terminalAnswerNoQueuedWork =
+			this.#terminalUnwindActive || this.#hasTerminalTextAnswerWithoutQueuedWork();
 		// A final-review concern that lands after the boundary window closed
 		// (catch-up off, or a review slower than its wait) keeps the one
 		// continuation the merged boundary flush would have granted it.
