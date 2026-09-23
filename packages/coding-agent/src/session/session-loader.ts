@@ -227,9 +227,12 @@ export async function visitEntriesFromFileStream(
 
 	try {
 		const file = Bun.file(filePath);
-		const source = Number.isFinite(maxBytes) ? file.slice(0, maxBytes) : file;
-		for await (const chunk of source.stream()) {
-			if (stopped) break;
+		const sourceTruncated = Number.isFinite(maxBytes) && maxBytes < file.size;
+		let bytesRemaining = maxBytes;
+		for await (const sourceChunk of file.stream()) {
+			if (stopped || bytesRemaining === 0) break;
+			const chunk = sourceChunk.byteLength > bytesRemaining ? sourceChunk.subarray(0, bytesRemaining) : sourceChunk;
+			bytesRemaining -= chunk.byteLength;
 			bytesSinceYield += chunk.byteLength;
 			options.onBytesConsumed?.(chunk.byteLength);
 			// Parsing before the chunk closes a line re-scans the unfinished record
@@ -244,6 +247,7 @@ export async function visitEntriesFromFileStream(
 				}
 				sink.append(chunk);
 				await yieldToMacrotask();
+				if (bytesRemaining === 0) break;
 				continue;
 			}
 			sink.append(chunk);
@@ -272,9 +276,14 @@ export async function visitEntriesFromFileStream(
 			await drain();
 			await yieldToMacrotask();
 		}
-		// A trailing record without a final newline: terminate it so the parser
-		// can complete it (readline yielded it; parseChunk needs the delimiter).
-		if (!stopped && !sink.isEmpty) {
+		// A byte-limited trailing fragment is incomplete by construction. Count it
+		// without feeding an unterminated JSON string into Bun.JSONL.parseChunk.
+		if (!stopped && !sink.isEmpty && sourceTruncated) {
+			const trailing = sink.flush();
+			if (trailing?.some(byte => byte !== 0x09 && byte !== 0x0a && byte !== 0x0d && byte !== 0x20)) {
+				options.onMalformedRecord?.();
+			}
+		} else if (!stopped && !sink.isEmpty) {
 			sink.append(LF);
 			await drain();
 		}
