@@ -6472,6 +6472,32 @@ describe("advisor", () => {
 			).toBe("preserve");
 		});
 
+		it("keeps a nit on the aside route during a non-text terminal unwind", () => {
+			expect(
+				resolveAdvisorDeliveryChannel({
+					severity: "nit",
+					autoResumeSuppressed: false,
+					streaming: true,
+					aborting: false,
+					terminalAnswerNoQueuedWork: false,
+					terminalUnwindActive: true,
+				}),
+			).toBe("aside");
+		});
+
+		it("keeps a concern on the steer route during a non-text terminal unwind", () => {
+			expect(
+				resolveAdvisorDeliveryChannel({
+					severity: "concern",
+					autoResumeSuppressed: false,
+					streaming: true,
+					aborting: false,
+					terminalAnswerNoQueuedWork: false,
+					terminalUnwindActive: true,
+				}),
+			).toBe("steer");
+		});
+
 		it("steers an opted-in late concern during interrupt immunity", () => {
 			expect(
 				resolveAdvisorDeliveryChannel({

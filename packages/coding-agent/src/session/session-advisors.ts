@@ -486,7 +486,9 @@ export class SessionAdvisors {
 		signal?: AbortSignal,
 	): Promise<void> {
 		const terminalBoundary = willContinue !== true;
-		if (terminalBoundary) this.#terminalUnwindActive = true;
+		const terminalTextBoundary =
+			terminalBoundary && this.#hasTerminalTextAnswerWithoutQueuedWork(messages);
+		if (terminalTextBoundary) this.#terminalUnwindActive = true;
 		try {
 			this.#advisorPrimaryTurnsCompleted++;
 			for (const advisor of this.#advisors) {
@@ -509,7 +511,7 @@ export class SessionAdvisors {
 			// With advisor.syncBacklog=off, the review drain can emit after this
 			// callback returns. Keep the terminal guard until the next real agent
 			// start rather than reopening the steer path in that microtask gap.
-			if (!terminalBoundary) this.#terminalUnwindActive = false;
+			if (!terminalTextBoundary) this.#terminalUnwindActive = false;
 		}
 	}
 
@@ -1352,9 +1354,10 @@ export class SessionAdvisors {
 	 * has already accepted the note; rejected calls never enter this route and
 	 * receive their specific policy outcome from `AdviseTool`.
 	 */
-	#hasTerminalTextAnswerWithoutQueuedWork(): boolean {
+	#hasTerminalTextAnswerWithoutQueuedWork(
+		messages: readonly AgentMessage[] = this.#host.agent.state.messages,
+	): boolean {
 		if (this.#host.agent.hasQueuedMessages() || this.#host.hasPendingNextTurnMessages()) return false;
-		const messages = this.#host.agent.state.messages;
 		let tail = messages.length - 1;
 		while (tail >= 0 && isAdvisorCard(messages[tail])) tail--;
 		return isTerminalTextAssistantAnswer(messages[tail]);
@@ -1369,7 +1372,8 @@ export class SessionAdvisors {
 		// agent-facing `<advisory>` bytes stay identical to the pre-multi-advisor path.
 		const source = advisor.slug ? advisor.name : undefined;
 		const interrupting = isInterruptingSeverity(severity);
-		const terminalAnswerNoQueuedWork = this.#hasTerminalTextAnswerWithoutQueuedWork();
+		const terminalAnswerNoQueuedWork =
+			this.#terminalUnwindActive || this.#hasTerminalTextAnswerWithoutQueuedWork();
 		const channel = resolveAdvisorDeliveryChannel({
 			severity,
 			autoResumeSuppressed: this.#advisorAutoResumeSuppressed,
