@@ -125,12 +125,13 @@ export function resolveAdvisorDeliveryChannel(opts: {
 		!opts.autoResumeSuppressed;
 	const terminalUnwindConcernSteers =
 		opts.terminalUnwindActive === true &&
+		opts.terminalAnswerNoQueuedWork === true &&
 		opts.severity === "concern" &&
 		!opts.aborting &&
 		opts.lateConcern === "steer" &&
 		!opts.autoResumeSuppressed;
 	if (opts.preserveOnly && !opts.streaming) return "preserve";
-	if (opts.terminalUnwindActive && opts.severity !== "blocker") {
+	if (opts.terminalUnwindActive && opts.terminalAnswerNoQueuedWork && opts.severity !== "blocker") {
 		return terminalUnwindConcernSteers ? "steer" : "preserve";
 	}
 	if (opts.terminalAnswerNoQueuedWork && opts.severity !== "blocker" && !opts.streaming && !opts.aborting)
