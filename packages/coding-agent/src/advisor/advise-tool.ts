@@ -123,15 +123,16 @@ export function resolveAdvisorDeliveryChannel(opts: {
 		!opts.aborting &&
 		opts.lateConcern === "steer" &&
 		!opts.autoResumeSuppressed;
+	const terminalUnwindConcernSteers =
+		opts.terminalUnwindActive === true &&
+		opts.severity === "concern" &&
+		!opts.aborting &&
+		opts.lateConcern === "steer" &&
+		!opts.autoResumeSuppressed;
 	if (opts.preserveOnly && !opts.streaming) return "preserve";
-	if (
-		opts.terminalUnwindActive &&
-		opts.terminalAnswerNoQueuedWork &&
-		opts.severity !== "blocker" &&
-		!opts.streaming &&
-		!lateConcernSteers
-	)
-		return "preserve";
+	if (opts.terminalUnwindActive && opts.severity !== "blocker") {
+		return terminalUnwindConcernSteers ? "steer" : "preserve";
+	}
 	if (opts.terminalAnswerNoQueuedWork && opts.severity !== "blocker" && !opts.streaming && !opts.aborting)
 		return lateConcernSteers ? "steer" : "preserve";
 	if (!isInterruptingSeverity(opts.severity)) return "aside";
