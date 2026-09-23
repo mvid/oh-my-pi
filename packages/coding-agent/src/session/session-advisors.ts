@@ -486,8 +486,7 @@ export class SessionAdvisors {
 		signal?: AbortSignal,
 	): Promise<void> {
 		const terminalBoundary = willContinue !== true;
-		const terminalTextBoundary =
-			terminalBoundary && this.#hasTerminalTextAnswerWithoutQueuedWork(messages);
+		const terminalTextBoundary = terminalBoundary && this.#hasTerminalTextAnswerWithoutQueuedWork(messages);
 		if (terminalTextBoundary) this.#terminalUnwindActive = true;
 		try {
 			this.#advisorPrimaryTurnsCompleted++;
@@ -1372,8 +1371,7 @@ export class SessionAdvisors {
 		// agent-facing `<advisory>` bytes stay identical to the pre-multi-advisor path.
 		const source = advisor.slug ? advisor.name : undefined;
 		const interrupting = isInterruptingSeverity(severity);
-		const terminalAnswerNoQueuedWork =
-			this.#terminalUnwindActive || this.#hasTerminalTextAnswerWithoutQueuedWork();
+		const terminalAnswerNoQueuedWork = this.#terminalUnwindActive || this.#hasTerminalTextAnswerWithoutQueuedWork();
 		const channel = resolveAdvisorDeliveryChannel({
 			severity,
 			autoResumeSuppressed: this.#advisorAutoResumeSuppressed,
