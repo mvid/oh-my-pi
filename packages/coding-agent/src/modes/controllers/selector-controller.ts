@@ -111,12 +111,9 @@ import { ExtensionDashboard } from "@oh-my-pi/pi-tui/overlays/extensions/extensi
 import { listLiveToolRecords, liveToolRecordFromSession } from "@oh-my-pi/pi-tui/overlays/extensions/live-tool-session";
 import { createExtensionDashboardRuntime } from "../components/extensions/dashboard-runtime";
 import { HistorySearchComponent } from "@oh-my-pi/pi-tui/overlays/history-search";
-import type {
-	ModelHubComponent as ModelHubComponentType,
-	ModelRoleSelectionScope,
-} from "@oh-my-pi/pi-tui/overlays/model-hub";
+import type { ModelRoleSelectionScope } from "@oh-my-pi/pi-tui/overlays/model-hub";
 import { createModelBrowserSource } from "../model-browser-source";
-import type { ModelPickerComponent as ModelPickerComponentType } from "@oh-my-pi/pi-tui/overlays/model-picker";
+import type { ModelOverlayModules } from "./model-overlay-ui";
 import type { ProviderAuthUiModules } from "./provider-auth-ui";
 import { PanelConfirmationComponent } from "../components/panel-confirmation";
 import { PanelLineupBuilderOverlayComponent } from "../components/panel-lineup-builder";
@@ -140,17 +137,9 @@ import type { SessionObserverRegistry } from "@oh-my-pi/pi-tui/overlays/session-
 
 const MANUAL_LOGIN_PROMPT = "Paste the authorization code (or full redirect URL), then press Enter:";
 
-interface ModelOverlayModules {
-	ModelHubComponent: typeof ModelHubComponentType;
-	ModelPickerComponent: typeof ModelPickerComponentType;
-}
-
 /** Synchronous first-use boundary for model overlays; key callbacks require immediate mounting. */
 function loadModelOverlayComponents(): ModelOverlayModules {
-	return {
-		ModelHubComponent: require("@oh-my-pi/pi-tui/overlays/model-hub.js").ModelHubComponent,
-		ModelPickerComponent: require("@oh-my-pi/pi-tui/overlays/model-picker.js").ModelPickerComponent,
-	};
+	return require("./model-overlay-ui").modelOverlayUi;
 }
 
 /** Synchronous first-use boundary for provider auth catalog and dialog components. */
