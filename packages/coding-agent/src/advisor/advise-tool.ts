@@ -132,14 +132,7 @@ export function resolveAdvisorDeliveryChannel(opts: {
 		(opts.allowTerminalConcernSteering ||
 			(opts.lateConcern === "steer" && !opts.aborting && !opts.autoResumeSuppressed));
 	if (opts.preserveOnly && !opts.streaming) return "preserve";
-	if (
-		opts.terminalUnwindActive &&
-		opts.terminalAnswerNoQueuedWork &&
-		opts.severity !== "blocker" &&
-		!opts.streaming &&
-		!lateConcernSteers
-	)
-		return "preserve";
+	if (opts.terminalUnwindActive && opts.severity !== "blocker" && !lateConcernSteers) return "preserve";
 	if (
 		opts.terminalAnswerNoQueuedWork &&
 		opts.severity !== "blocker" &&
