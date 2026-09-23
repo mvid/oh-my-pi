@@ -625,8 +625,7 @@ export class SessionAdvisors {
 		signal?: AbortSignal,
 	): Promise<void> {
 		const terminalBoundary = willContinue !== true;
-		const terminalTextBoundary =
-			terminalBoundary && this.#hasTerminalTextAnswerWithoutQueuedWork(messages);
+		const terminalTextBoundary = terminalBoundary && this.#hasTerminalTextAnswerWithoutQueuedWork(messages);
 		if (terminalTextBoundary) this.#terminalUnwindActive = true;
 		// Delivery state follows primary boundaries even when review cadence skips a callback.
 		this.#advisorPrimaryWillContinue = willContinue === true;
@@ -1711,8 +1710,7 @@ export class SessionAdvisors {
 			return;
 		}
 		const interrupting = isInterruptingSeverity(severity);
-		const terminalAnswerNoQueuedWork =
-			this.#terminalUnwindActive || this.#hasTerminalTextAnswerWithoutQueuedWork();
+		const terminalAnswerNoQueuedWork = this.#terminalUnwindActive || this.#hasTerminalTextAnswerWithoutQueuedWork();
 		// A final-review concern that lands after the boundary window closed
 		// (catch-up off, or a review slower than its wait) keeps the one
 		// continuation the merged boundary flush would have granted it.
