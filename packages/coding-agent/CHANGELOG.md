@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added saved `/panel` roles with independent family-diverse or named-persona lineups for isolated read-only participants ([#7750](https://github.com/can1357/oh-my-pi/pull/7750) by [@mvid](https://github.com/mvid)).
+
 ### Changed
 
 - Running `omp "prompt"` without a terminal on stdin (scripts, CI, `</dev/null`) now runs the prompt headless like `-p`; a bare `omp` without a terminal exits 2 with an error instead of exiting silently ([#13623](https://github.com/can1357/oh-my-pi/pull/13623) by [@H4vC](https://github.com/H4vC))
