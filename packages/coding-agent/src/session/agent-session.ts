@@ -79,7 +79,13 @@ import type {
 	UsageReport,
 	UserMessage,
 } from "@oh-my-pi/pi-ai";
-import { type Effort, serviceTierFamily, streamSimple } from "@oh-my-pi/pi-ai";
+import {
+	type Effort,
+	isAnthropicFastModeFallbackDisabled,
+	realizesPriorityServiceTier,
+	serviceTierFamily,
+	streamSimple,
+} from "@oh-my-pi/pi-ai";
 import * as AIError from "@oh-my-pi/pi-ai/error";
 import { resetOpenAICodexHistoryAfterCompaction } from "@oh-my-pi/pi-ai/providers/openai-codex-responses";
 import { withCredentialRedaction } from "@oh-my-pi/pi-ai/providers/transform-messages";
@@ -449,6 +455,8 @@ import {
 	cfgSkillful,
 	cfgTierAdvisor,
 	cfgTierAnthropic,
+	cfgTierAutoFastMode,
+	cfgTierAutoFastModeDurationMinutes,
 	cfgTierGoogle,
 	cfgTierOpenai,
 	cfgProvidersAnthropicSlowMode,
@@ -719,6 +727,14 @@ export class AgentSession implements SettingsScope {
 	readonly #models: ModelControls;
 	readonly #tools: SessionTools;
 	readonly #prewalk: PrewalkCoordinator;
+	#lastUserPromptAt: number | undefined;
+	#autoFastModeSuppressed = false;
+	/**
+	 * `provider/model` keys already warned about a refused activity-lease
+	 * priority request, so one rejection does not warn on every later turn.
+	 */
+	readonly #autoFastRejectionNoticed = new Set<string>();
+	#requestPrioritySource: "manual" | "auto" | undefined;
 
 	readonly #providerBoundary: SessionProviderBoundary;
 	#promptTemplates: PromptTemplate[];
@@ -1674,10 +1690,15 @@ export class AgentSession implements SettingsScope {
 			memoryTaskDepth: config.memoryTaskDepth,
 			createMemoryTools: config.createMemoryTools,
 		});
-		// Resolve the wire service-tier per request so the Fireworks Priority
-		// toggle scopes priority to Fireworks alone, without mutating the shared
-		// session `serviceTier` that drives `/fast` and OpenAI/Anthropic priority.
-		this.agent.serviceTierResolver = model => this.#models.effectiveServiceTier(model);
+		// Resolve the wire service tier once per request and retain whether priority
+		// came from explicit configuration or the temporary activity lease.
+		this.agent.serviceTierResolver = model => {
+			const configuredTier = this.#models.effectiveServiceTier(model);
+			const resolvedTier = this.#resolveMainServiceTier(model);
+			this.#requestPrioritySource =
+				resolvedTier === "priority" ? (configuredTier === "priority" ? "manual" : "auto") : undefined;
+			return resolvedTier;
+		};
 		this.#titleSystemPrompt = config.titleSystemPrompt;
 		this.#transformContext = config.transformContext ?? (messages => messages);
 		this.#sideStreamFn = config.sideStreamFn ?? streamSimple;
@@ -3392,6 +3413,13 @@ export class AgentSession implements SettingsScope {
 
 	#processAgentEvent = async (event: AgentEvent): Promise<void> => {
 		const eventPromptGeneration = this.#promptGeneration;
+		// Agent listeners are fire-and-forget, so capture the origin before this
+		// handler reaches any await and a later request can overwrite the slot.
+		const requestPrioritySource =
+			event.type === "message_end" && event.message.role === "assistant" ? this.#requestPrioritySource : undefined;
+		if (event.type === "message_end" && event.message.role === "assistant") {
+			this.#requestPrioritySource = undefined;
+		}
 		// A fresh run supersedes the previously settled (and pruned) refusal
 		// turn: state-based lookups take over again.
 		if (event.type === "agent_start") {
@@ -3657,16 +3685,31 @@ export class AgentSession implements SettingsScope {
 						ttftMs: assistantMsg.ttft,
 					});
 				}
-				if (
-					assistantMsg.disabledFeatures?.includes("priority") &&
-					this.serviceTierByFamily.anthropic === "priority"
-				) {
-					this.setServiceTierFamily("anthropic", undefined);
-					this.emitNotice(
-						"warning",
-						"Priority/fast mode rejected for this model; retried without it. Fast mode is now off.",
-						"priority",
-					);
+				if (assistantMsg.disabledFeatures?.includes("priority")) {
+					if (
+						requestPrioritySource === "manual" ||
+						(requestPrioritySource === undefined && this.serviceTierByFamily.anthropic === "priority")
+					) {
+						const fastModeStillEnabled = this.serviceTierByFamily.anthropic === "priority";
+						if (fastModeStillEnabled) this.setServiceTierFamily("anthropic", undefined);
+						this.emitNotice(
+							"warning",
+							fastModeStillEnabled
+								? "Priority/fast mode rejected for this model; retried without it. Fast mode is now off."
+								: "Priority/fast mode was rejected for this request and retried without it.",
+							"priority",
+						);
+					} else if (requestPrioritySource === "auto") {
+						const key = `${assistantMsg.provider}/${assistantMsg.model}`;
+						if (!this.#autoFastRejectionNoticed.has(key)) {
+							this.#autoFastRejectionNoticed.add(key);
+							this.emitNotice(
+								"warning",
+								`Auto fast mode rejected for ${key}; retried without it. Other models keep auto fast mode; /fast on re-arms this one.`,
+								"priority",
+							);
+						}
+					}
 				}
 				this.#ttsr.onAssistantMessageEnd(assistantMsg);
 				if (this.#handoff.isGeneratingHandoff) {
@@ -5753,6 +5796,11 @@ export class AgentSession implements SettingsScope {
 		return this.#models.serviceTierByFamily;
 	}
 
+	/** Configured tier without temporary user-activity priority. */
+	configuredServiceTier(model: Model): ServiceTier | undefined {
+		return this.#models.effectiveServiceTier(model);
+	}
+
 	/** Whether agent is currently streaming a response */
 	get isStreaming(): boolean {
 		return this.agent.state.isStreaming || this.#promptInFlightCount > 0;
@@ -6882,15 +6930,18 @@ export class AgentSession implements SettingsScope {
 		const templated = expandPromptTemplates ? expandPromptTemplate(text, [...this.#promptTemplates]) : text;
 		const expandedText = options?.synthetic ? templated : this.#modelMentions.expandMentions(templated);
 
+		const promptAttribution = options?.attribution ?? (options?.synthetic ? "agent" : "user");
+		const userInitiated = options?.userInitiated ?? (!options?.synthetic && promptAttribution === "user");
+
 		// Magic keywords (see modes/magic-keywords.ts): append hidden system notices after the
 		// user's message that steer this turn. User-authored prompts only — synthetic /
 		// agent-initiated turns never trigger them.
-		const keywordNotices = options?.synthetic ? [] : this.#createMagicKeywordNotices(expandedText);
+		const keywordNotices = !options?.synthetic && userInitiated ? this.#createMagicKeywordNotices(expandedText) : [];
 
 		// A user-initiated prompt (typed message or the `.`/`c` continue shortcut)
 		// re-enables advisor auto-resume that a prior user interrupt suppressed.
 		// Agent-initiated synthetic prompts (auto-continue, plan, reminders) do not.
-		if (options?.userInitiated ?? !options?.synthetic) {
+		if (userInitiated) {
 			this.#advisors.autoResumeSuppressed = false;
 			this.#planModeReminderCount = 0;
 			this.#planModeReminderAwaitingProgress = false;
@@ -6898,8 +6949,6 @@ export class AgentSession implements SettingsScope {
 			// a reminder continuation this prompt just preempted.
 			this.#toolChoiceQueue.removeByLabel("plan-mode-decision");
 		}
-
-		const promptAttribution = options?.attribution ?? (options?.synthetic ? "agent" : "user");
 
 		// If streaming, queue via steer()/followUp()/aside based on option
 		if (this.isStreaming) {
@@ -6920,6 +6969,7 @@ export class AgentSession implements SettingsScope {
 			await this.#queueUserMessage(expandedText, options?.images, streamingBehavior, {
 				timestamp: submittedAt,
 				attribution: promptAttribution,
+				userInitiated,
 			});
 			outcome.sessionClaimed = true;
 			return true;
@@ -6936,10 +6986,9 @@ export class AgentSession implements SettingsScope {
 			supportsExternalThinking(activeModel)
 				? buildNamedToolChoice("think", activeModel)
 				: undefined;
-		const eagerTodoPrelude =
-			!options?.synthetic && !hasPendingUserDirective ? this.#todo.createEagerTodoPrelude(expandedText) : undefined;
-		const eagerTaskPrelude =
-			!options?.synthetic && !hasPendingUserDirective ? this.#todo.createEagerTaskPrelude(expandedText) : undefined;
+		const eagerPreludeEligible = !options?.synthetic && !hasPendingUserDirective;
+		const eagerTodoPrelude = eagerPreludeEligible ? this.#todo.createEagerTodoPrelude(expandedText) : undefined;
+		const eagerTaskPrelude = eagerPreludeEligible ? this.#todo.createEagerTaskPrelude(expandedText) : undefined;
 		const attachmentSourceNotices = this.#createAttachmentSourceNotices(options?.images, submittedAt);
 		const normalizedImages = await this.#normalizeImagesForModel(options?.images);
 
@@ -6973,6 +7022,7 @@ export class AgentSession implements SettingsScope {
 			await this.#queueUserMessage(expandedText, options?.images, streamingBehavior, {
 				timestamp: submittedAt,
 				attribution: promptAttribution,
+				userInitiated,
 				preprocessed: {
 					images: normalizedImages,
 					descriptionNotice: imageDescriptionNotice,
@@ -7011,6 +7061,8 @@ export class AgentSession implements SettingsScope {
 		if (eagerTaskPrelude) {
 			preludeMessages.push(eagerTaskPrelude);
 		}
+
+		if (userInitiated) this.#recordUserActivity();
 
 		let dispatched = false;
 		try {
@@ -7101,6 +7153,7 @@ export class AgentSession implements SettingsScope {
 			| undefined,
 		outcome: PromptDispatchOutcome,
 	): Promise<boolean> {
+		const userInitiated = message.attribution === "user";
 		const textContent =
 			typeof message.content === "string"
 				? message.content
@@ -7131,6 +7184,7 @@ export class AgentSession implements SettingsScope {
 		if (options?.queueOnly) {
 			const streamingBehavior = options?.streamingBehavior;
 			if (!streamingBehavior) throw new AgentBusyError();
+			if (userInitiated) this.#recordUserActivity();
 
 			for (const notice of keywordNotices) {
 				await this.#queueCustomMessage(notice, streamingBehavior);
@@ -7148,6 +7202,7 @@ export class AgentSession implements SettingsScope {
 				throw new AgentBusyError();
 			}
 
+			if (userInitiated) this.#recordUserActivity();
 			for (const notice of keywordNotices) {
 				await this.#queueCustomMessage(notice, streamingBehavior);
 			}
@@ -7185,6 +7240,7 @@ export class AgentSession implements SettingsScope {
 				outcome.sessionClaimed = this.agent.state.isStreaming;
 				throw new AgentBusyError();
 			}
+			if (userInitiated) this.#recordUserActivity();
 			for (const notice of keywordNotices) {
 				await this.#queueCustomMessage(notice, streamingBehavior);
 			}
@@ -7195,6 +7251,7 @@ export class AgentSession implements SettingsScope {
 			outcome.sessionClaimed = true;
 			return true;
 		}
+		if (userInitiated) this.#recordUserActivity();
 		outcome.sessionClaimed = await this.#promptWithMessage(preparedMessage, textContent, {
 			...options,
 			prependMessages:
@@ -7838,9 +7895,11 @@ export class AgentSession implements SettingsScope {
 			timestamp?: number;
 			attribution?: MessageAttribution;
 			preprocessed?: { images: ImageContent[] | undefined; descriptionNotice: CustomMessage | undefined };
+			userInitiated?: boolean;
 		},
 	): Promise<void> {
 		const attribution = options?.attribution ?? "user";
+		const userInitiated = options?.userInitiated ?? attribution === "user";
 		const timestamp = options?.timestamp;
 		const preprocessed = options?.preprocessed;
 		// Captured before any await below so the aside branch can detect a
@@ -7855,7 +7914,8 @@ export class AgentSession implements SettingsScope {
 		// user-driven (folds into context via #resumeStrandedIrcAsides's post-interrupt
 		// branch) until the next deliberate steer/follow-up/prompt, matching the
 		// sendCustomMessage aside path (queueAside), which never touches this flag.
-		if (mode !== "aside") this.#advisors.autoResumeSuppressed = false;
+		if (userInitiated) this.#recordUserActivity();
+		if (userInitiated && mode !== "aside") this.#advisors.autoResumeSuppressed = false;
 		// The pre-dispatch re-check in prompt() arrives with normalization and the
 		// vision description already done — reuse them instead of paying a second
 		// vision-model request for the same attachment.
@@ -9252,7 +9312,9 @@ export class AgentSession implements SettingsScope {
 
 	/** Reports whether priority service is realized by the active model. */
 	isFastModeActive(): boolean {
-		return this.#models.isFastModeActive();
+		const model = this.agent.state.model;
+		if (!model || !realizesPriorityServiceTier(this.#resolveMainServiceTier(model), model)) return false;
+		return model.provider !== "anthropic" || !isAnthropicFastModeFallbackDisabled(this.providerSessionState, model);
 	}
 
 	/** Record the Claude account lane that served this session's latest Anthropic request. */
@@ -9315,12 +9377,38 @@ export class AgentSession implements SettingsScope {
 
 	/** Enables or disables priority service for the active model family. */
 	setFastMode(enabled: boolean): boolean {
-		return this.#models.setFastMode(enabled);
+		const changed = this.#models.setFastMode(enabled);
+		if (changed && !enabled) this.#autoFastModeSuppressed = true;
+		return changed;
 	}
 
-	/** Toggles priority service for the active model family. */
+	/** Toggles priority based on configured and currently realized state. */
 	toggleFastMode(): boolean {
-		return this.#models.toggleFastMode();
+		const shouldEnable = !this.isFastModeEnabled() && !this.isFastModeActive();
+		if (!this.setFastMode(shouldEnable)) return false;
+		return this.#models.isFastModeEnabled();
+	}
+
+	#recordUserActivity(): void {
+		if (this.#agentKind !== "main") return;
+		this.#lastUserPromptAt = Date.now();
+		this.#autoFastModeSuppressed = false;
+	}
+
+	#resolveMainServiceTier(model: Model): ServiceTier | undefined {
+		const configuredTier = this.#models.effectiveServiceTier(model);
+		if (configuredTier !== undefined) return configuredTier;
+		if (
+			!cfgTierAutoFastMode.get(this.settings) ||
+			this.#autoFastModeSuppressed ||
+			this.#lastUserPromptAt === undefined ||
+			!serviceTierFamily(model) ||
+			!realizesPriorityServiceTier("priority", model)
+		) {
+			return undefined;
+		}
+		const autoFastModeActivityWindowMs = cfgTierAutoFastModeDurationMinutes.get(this.settings) * 60 * 1000;
+		return Date.now() - this.#lastUserPromptAt < autoFastModeActivityWindowMs ? "priority" : undefined;
 	}
 
 	/**
