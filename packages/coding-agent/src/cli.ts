@@ -186,6 +186,7 @@ const AGENT_BRIDGE_CONTRACT = {
 	perCallTimeout: true,
 	servedModel: true,
 	servedFamily: true,
+	panelLineupFreeze: true,
 } as const;
 
 const TINY_WORKER_ARG = "__omp_worker_tiny_inference";
@@ -568,6 +569,10 @@ export async function runCli(argv: string[]): Promise<void> {
 		process.stdout.write(formatLicenseOutput());
 		return;
 	}
+	if (resolvedArgv[0] === "--agent-bridge-contract") {
+		process.stdout.write(`${JSON.stringify(AGENT_BRIDGE_CONTRACT)}\n`);
+		return;
+	}
 	let stopStartupComposer: (() => void) | undefined;
 	if (
 		!process.env.PI_TIMING &&
@@ -596,10 +601,6 @@ export async function runCli(argv: string[]): Promise<void> {
 
 	if (resolvedArgv[0] === "--smoke-test") {
 		await runSmokeTest();
-		return;
-	}
-	if (resolvedArgv[0] === "--agent-bridge-contract") {
-		process.stdout.write(`${JSON.stringify(AGENT_BRIDGE_CONTRACT)}\n`);
 		return;
 	}
 
