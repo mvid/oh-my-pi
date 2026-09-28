@@ -244,6 +244,10 @@ if (!globalThis.__omp_js_prelude_loaded__) {
 			: handle._schema !== undefined
 				? JSON.parse(snapshot?.text ?? "")
 				: (snapshot?.text ?? "");
+		if (handle.kind === "agent") {
+			if (typeof snapshot?.model === "string") handle.model = snapshot.model;
+			if (typeof snapshot?.family === "string") handle.family = snapshot.family;
+		}
 		handle._result = value;
 		return value;
 	};
@@ -437,8 +441,8 @@ if (!globalThis.__omp_js_prelude_loaded__) {
 				"agent",
 				opts,
 				rest,
-				["agent", "label", "schema", "isolated", "apply", "merge", "schemaMode", "tools"],
-				"{ agent, label, schema, schemaMode, isolated, apply, merge, tools }",
+				["agent", "model", "label", "schema", "isolated", "apply", "merge", "schemaMode", "timeout", "tools"],
+				"{ agent, model, label, schema, schemaMode, isolated, apply, merge, timeout, tools }",
 			);
 			const result = await globalThis.__omp_call_tool__("__agent__", { prompt, ...options });
 			if (!result || typeof result.id !== "string") throw new Error("agent() did not return a handle");
