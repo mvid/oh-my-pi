@@ -1217,6 +1217,11 @@
 - Bumped the Anthropic usage-report cache key so older processes cannot keep refilling entitlement-free cached reports ([#7751](https://github.com/can1357/oh-my-pi/pull/7751) by [@mvid](https://github.com/mvid)).
 - Added a `display.showUsageModels` setting (default `true`) that opts out of the "Models with usage data" list in `/usage`, for users who only want the quota bars ([#7852](https://github.com/can1357/oh-my-pi/pull/7852) by [@mvid](https://github.com/mvid)).
 - Added a `display.showZeroUsageMeters` setting to hide untouched supplemental model and tier quota meters from live usage reports ([#10423](https://github.com/can1357/oh-my-pi/pull/10423) by [@mvid](https://github.com/mvid)).
+- Deferred-command previews now show the newest queued panel instead of the oldest.
+- `/advisor status` no longer waits for a quota fetch before rendering.
+- Auto-restart waits while the executable is missing or mid-build, and binary builds land through an atomic rename.
+- Bare `/fast` toggles can disable a configured priority tier even when the active provider cannot realize it.
+- Configured default model fallback chains now select their first available model at startup instead of an unrelated authenticated provider.
 
 ## [18.1.17] - 2026-09-10
 
