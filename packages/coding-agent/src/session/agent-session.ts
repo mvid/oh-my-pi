@@ -7096,7 +7096,7 @@ export class AgentSession implements SettingsScope {
 			supportsExternalThinking(activeModel)
 				? buildNamedToolChoice("think", activeModel)
 				: undefined;
-		const eagerPreludeEligible = !options?.synthetic && userInitiated && !hasPendingUserDirective;
+		const eagerPreludeEligible = !options?.synthetic && !hasPendingUserDirective;
 		const eagerTodoPrelude = eagerPreludeEligible ? this.#todo.createEagerTodoPrelude(expandedText) : undefined;
 		const eagerTaskPrelude = eagerPreludeEligible ? this.#todo.createEagerTaskPrelude(expandedText) : undefined;
 		const attachmentSourceNotices = this.#createAttachmentSourceNotices(options?.images, submittedAt);
