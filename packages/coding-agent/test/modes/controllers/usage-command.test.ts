@@ -396,6 +396,30 @@ describe("interactive /usage account visibility", () => {
 		return stripVTControlCharacters(mounted?.render(120).join("\n") ?? "");
 	}
 
+	it("renders advisor status before usage refresh returns", async () => {
+		const refresh = Promise.withResolvers<UsageReport[] | null>();
+		const ctx = createInteractiveModeContext({
+			session: {
+				getAdvisorStats: () => ({
+					configured: true,
+					active: false,
+					contextWindow: 0,
+					contextTokens: 0,
+					tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+					cost: 0,
+					messages: { user: 0, assistant: 0, total: 0 },
+					advisors: [],
+				}),
+				fetchUsageReports: () => refresh.promise,
+				modelRegistry: { authStorage },
+			},
+		});
+		const result = new CommandController(ctx).handleAdvisorStatusCommand();
+		expect(stripVTControlCharacters(ctx.chatContainer.render(120).join("\n"))).toContain("Advisor Status");
+		refresh.resolve([]);
+		await result;
+	});
+
 	it("warns without opening the dashboard when usage reporting is not configured", async () => {
 		const warnings: string[] = [];
 		await command(undefined, warnings).handleUsageCommand();
