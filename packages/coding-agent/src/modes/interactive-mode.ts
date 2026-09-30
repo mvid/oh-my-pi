@@ -742,8 +742,14 @@ class StatusHudContainer extends AnchoredLiveContainer {
 }
 
 /**
- * Preview of the command panels queued while the agent streams, rendered above
- * the editor so `/usage` and friends answer immediately mid-turn.
+ * Preview of the newest command panel queued while the agent streams, rendered
+ * above the editor so `/usage` and friends answer immediately mid-turn.
+ *
+ * Only the newest panel is previewed. Truncation keeps the head of the content,
+ * so previewing the whole queue showed a prefix of the OLDEST panel and hid the
+ * output the user just asked for: running `/usage` twice mid-turn left the
+ * second report invisible until the settle. Earlier panels stay queued and land
+ * in the transcript together.
  *
  * Capped in height: the panels are shown in full in the transcript at the next
  * settle, so the preview only has to answer the question, not reproduce the
@@ -775,14 +781,14 @@ class DeferredCommandPreview implements Component {
 	render(width: number): readonly string[] {
 		const rows: string[] = [];
 		for (const item of this.items) rows.push(...item.render(width));
-		const queued = this.commandCount === 1 ? "1 command output" : `${this.commandCount} command outputs`;
+		const label = this.commandCount === 1 ? "1 command output" : `newest of ${this.commandCount} command outputs`;
 		if (rows.length <= this.maxRows) {
-			rows.push(theme.fg("dim", `${queued} — repeated in the transcript when the agent pauses`));
+			rows.push(theme.fg("dim", `${label}, repeated in the transcript when the agent pauses`));
 			return rows;
 		}
 		const shown = rows.slice(0, Math.max(1, this.maxRows - 1));
 		const hidden = rows.length - shown.length;
-		shown.push(theme.fg("dim", `… ${hidden} more rows — ${queued} shown in full when the agent pauses`));
+		shown.push(theme.fg("dim", `… ${hidden} more rows, ${label} shown in full when the agent pauses`));
 		return shown;
 	}
 }
@@ -1474,6 +1480,8 @@ export class InteractiveMode implements InteractiveModeContext {
 	#pendingCommandOutputSessionId: string | undefined;
 	/** Commands (not components) queued while streaming, for the deferral hint. */
 	#pendingCommandOutputCommands = 0;
+	/** Components of the most recent queued command only, for the preview. */
+	#pendingCommandOutputLatest: Component[] = [];
 	#pendingSlashCommands: SlashCommand[] = [];
 	/** Symbol preset the slash-command picker icons were resolved under. */
 	#slashIconPreset: string | undefined;
@@ -1646,6 +1654,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#pendingCommandOutput = [];
 		this.#pendingCommandOutputSessionId = undefined;
 		this.#pendingCommandOutputCommands = 0;
+		this.#pendingCommandOutputLatest = [];
 		this.compactionQueuedMessages = [];
 		this.streamingComponent = undefined;
 		this.streamingMessage = undefined;
@@ -7056,11 +7065,13 @@ export class InteractiveMode implements InteractiveModeContext {
 		if (this.#pendingCommandOutput.length > 0 && this.#pendingCommandOutputSessionId !== sessionId) {
 			this.#pendingCommandOutput = [];
 			this.#pendingCommandOutputCommands = 0;
+			this.#pendingCommandOutputLatest = [];
 		}
 		this.#pendingCommandOutputSessionId = sessionId;
 		const items = Array.isArray(content) ? content : [content as Component];
 		this.#pendingCommandOutput.push(...items);
 		this.#pendingCommandOutputCommands += 1;
+		this.#pendingCommandOutputLatest = items;
 		this.#renderDeferredCommandNotice();
 		this.ui.requestRender();
 	}
@@ -7090,8 +7101,9 @@ export class InteractiveMode implements InteractiveModeContext {
 	}
 
 	/**
-	 * Preview the queued panels above the editor so a command answers straight
-	 * away, then clear at settle when the real panels enter the transcript.
+	 * Preview the newest queued panel above the editor so a command answers
+	 * straight away, then clear at settle when the real panels enter the
+	 * transcript.
 	 *
 	 * Height is capped against the viewport: a `/usage` report with several
 	 * providers is tall enough to push the prompt off screen, and the full text
@@ -7106,7 +7118,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		);
 		this.deferredCommandContainer.addChild(new Spacer(1));
 		this.deferredCommandContainer.addChild(
-			new DeferredCommandPreview([...this.#pendingCommandOutput], maxRows, this.#pendingCommandOutputCommands),
+			new DeferredCommandPreview([...this.#pendingCommandOutputLatest], maxRows, this.#pendingCommandOutputCommands),
 		);
 	}
 
@@ -7118,6 +7130,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		this.#pendingCommandOutput = [];
 		this.#pendingCommandOutputSessionId = undefined;
 		this.#pendingCommandOutputCommands = 0;
+		this.#pendingCommandOutputLatest = [];
 		this.#renderDeferredCommandNotice();
 		if (pendingSessionId !== this.sessionManager.getSessionId()) return;
 		this.present(pending);
