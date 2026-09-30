@@ -84,7 +84,6 @@ import {
 	isAnthropicFastModeFallbackDisabled,
 	realizesPriorityServiceTier,
 	serviceTierFamily,
-	shouldSendServiceTier,
 	streamSimple,
 } from "@oh-my-pi/pi-ai";
 import * as AIError from "@oh-my-pi/pi-ai/error";
@@ -739,12 +738,17 @@ export class AgentSession implements SettingsScope {
 	readonly #prewalk: PrewalkCoordinator;
 	#lastUserPromptAt: number | undefined;
 	#autoFastModeSuppressed = false;
-	/**
-	 * `provider/model` keys already warned about a refused activity-lease
-	 * priority request, so one rejection does not warn on every later turn.
-	 */
-	readonly #autoFastRejectionNoticed = new Set<string>();
 	#requestPrioritySource: "manual" | "auto" | undefined;
+	/**
+	 * What the provider did with the last priority request per `provider/model`:
+	 * `false` when it was refused (Anthropic fast-mode rejection, OpenAI tier
+	 * downgrade), `true` when it was served. Live evidence outranks the account
+	 * entitlement snapshot in both directions; an explicit `/fast on` re-arm
+	 * clears it so the next turn re-learns.
+	 */
+	readonly #priorityObserved = new Map<string, boolean>();
+	/** Newest usage reports, cached by {@link AgentSession.fetchUsageReports}. */
+	#usageReports: UsageReport[] | undefined;
 
 	readonly #providerBoundary: SessionProviderBoundary;
 	#promptTemplates: PromptTemplate[];
@@ -1738,8 +1742,8 @@ export class AgentSession implements SettingsScope {
 			memoryTaskDepth: config.memoryTaskDepth,
 			createMemoryTools: config.createMemoryTools,
 		});
-		// Resolve the wire service tier once per request and retain whether priority
-		// came from explicit configuration or the temporary activity lease.
+		// Resolve the wire tier once per request and retain whether priority came
+		// from explicit configuration or the temporary activity lease.
 		this.agent.serviceTierResolver = model => {
 			const configuredTier = this.#models.effectiveServiceTier(model);
 			const resolvedTier = this.#resolveMainServiceTier(model);
@@ -3780,11 +3784,14 @@ export class AgentSession implements SettingsScope {
 						ttftMs: assistantMsg.ttft,
 					});
 				}
+				const priorityKey = `${assistantMsg.provider}/${assistantMsg.model}`;
 				if (assistantMsg.disabledFeatures?.includes("priority")) {
-					if (
+					const firstDenial = this.#priorityObserved.get(priorityKey) !== false;
+					this.#priorityObserved.set(priorityKey, false);
+					const manualRequest =
 						requestPrioritySource === "manual" ||
-						(requestPrioritySource === undefined && this.serviceTierByFamily.anthropic === "priority")
-					) {
+						(requestPrioritySource === undefined && this.serviceTierByFamily.anthropic === "priority");
+					if (manualRequest) {
 						const fastModeStillEnabled = this.serviceTierByFamily.anthropic === "priority";
 						if (fastModeStillEnabled) this.setServiceTierFamily("anthropic", undefined);
 						this.emitNotice(
@@ -3794,17 +3801,16 @@ export class AgentSession implements SettingsScope {
 								: "Priority/fast mode was rejected for this request and retried without it.",
 							"priority",
 						);
-					} else if (requestPrioritySource === "auto") {
-						const key = `${assistantMsg.provider}/${assistantMsg.model}`;
-						if (!this.#autoFastRejectionNoticed.has(key)) {
-							this.#autoFastRejectionNoticed.add(key);
-							this.emitNotice(
-								"warning",
-								`Auto fast mode rejected for ${key}; retried without it. Other models keep auto fast mode; /fast on re-arms this one.`,
-								"priority",
-							);
-						}
+					} else if (firstDenial) {
+						this.emitNotice(
+							"warning",
+							`Auto fast mode rejected for ${priorityKey}; retried without it. Other models keep auto fast mode; /fast on re-arms this one.`,
+							"priority",
+						);
 					}
+				} else if (requestPrioritySource !== undefined) {
+					// A served request outranks stale entitlement or refusal evidence.
+					this.#priorityObserved.set(priorityKey, true);
 				}
 				this.#ttsr.onAssistantMessageEnd(assistantMsg);
 				if (this.#handoff.isGeneratingHandoff) {
@@ -7038,7 +7044,6 @@ export class AgentSession implements SettingsScope {
 		// Expand file-based prompt templates if requested
 		const templated = expandPromptTemplates ? expandPromptTemplate(text, [...this.#promptTemplates]) : text;
 		const expandedText = options?.synthetic ? templated : this.#modelMentions.expandMentions(templated);
-
 		const promptAttribution = options?.attribution ?? (options?.synthetic ? "agent" : "user");
 		const userInitiated = options?.userInitiated ?? (!options?.synthetic && promptAttribution === "user");
 
@@ -7085,7 +7090,7 @@ export class AgentSession implements SettingsScope {
 		const hasPendingUserDirective = this.#toolChoiceQueue.inspect().includes("user-force");
 		const activeModel = this.agent.state.model;
 		const externalThinkingToolChoice =
-			!options?.synthetic &&
+			userInitiated &&
 			!hasPendingUserDirective &&
 			cfgExternalThinking.get(this.settings) &&
 			this.getEnabledToolNames().includes("think") &&
@@ -7295,6 +7300,7 @@ export class AgentSession implements SettingsScope {
 				if (this.isStreaming) outcome.sessionClaimed = this.agent.state.isStreaming;
 				throw new AgentBusyError();
 			}
+			if (userInitiated) this.#recordUserActivity();
 
 			if (userInitiated) this.#recordUserActivity();
 			await this.#queueCustomMessage(message, streamingBehavior, {
@@ -9746,12 +9752,61 @@ export class AgentSession implements SettingsScope {
 
 	/** Reports whether a fast service tier is realized by the active model. */
 	isFastModeActive(): boolean {
+		return this.fastModeState() === "active";
+	}
+
+	/**
+	 * Three-way view of priority service for the active model:
+	 * - `off`: nothing asked for priority (no family tier, no live auto lease).
+	 * - `active`: the next request carries priority and nothing has refused it.
+	 * - `blocked`: priority was asked for and is known not to land — the account
+	 *   lacks the entitlement, the provider rejected fast mode, or it served the
+	 *   turn at a lower tier. The status line paints this state red.
+	 */
+	fastModeState(): "off" | "active" | "blocked" {
 		const model = this.agent.state.model;
-		if (!model) return false;
-		const tier = this.#resolveMainServiceTier(model);
-		if (tier === "ultrafast") return shouldSendServiceTier(tier, model);
-		if (!realizesPriorityServiceTier(tier, model)) return false;
-		return model.provider !== "anthropic" || !isAnthropicFastModeFallbackDisabled(this.providerSessionState, model);
+		if (!model) return "off";
+		const configuredTier = this.#models.effectiveServiceTier(model);
+		if (configuredTier === "ultrafast") return this.#models.isFastModeActive() ? "active" : "off";
+		if (!realizesPriorityServiceTier("priority", model)) return "off";
+		const intended = configuredTier === "priority" || this.#autoPriorityLeaseLive(model);
+		if (!intended) return "off";
+		return this.#priorityBlockedReason(model) === undefined ? "active" : "blocked";
+	}
+
+	/**
+	 * Why priority cannot land on `model`, or `undefined` when nothing objects.
+	 * Every branch needs positive evidence: an unknown entitlement, an unfetched
+	 * usage report, or a provider that never echoes its tier all read as fine.
+	 * What the provider actually did last turn outranks the account snapshot,
+	 * which can be stale in both directions.
+	 */
+	#priorityBlockedReason(model: Model): string | undefined {
+		if (model.provider === "anthropic" && isAnthropicFastModeFallbackDisabled(this.providerSessionState, model)) {
+			return "the provider rejected fast mode for this model";
+		}
+		const observed = this.#priorityObserved.get(`${model.provider}/${model.id}`);
+		if (observed !== undefined) {
+			return observed ? undefined : "the provider refused priority on the last turn";
+		}
+		return this.#priorityEntitlementReason(model);
+	}
+
+	/**
+	 * Account-level reason priority is unavailable, from the usage reports the
+	 * status-line poll already fetches. `undefined` whenever no report carries an
+	 * entitlement, so the gate can only suppress a request the account is known
+	 * to be ineligible for. With several credentials on one provider a single
+	 * eligible account keeps priority armed.
+	 */
+	#priorityEntitlementReason(model: Model): string | undefined {
+		const entitlements = this.#usageReports
+			?.filter(report => report.provider === model.provider)
+			.map(report => report.priorityEntitlement)
+			.filter(entitlement => entitlement !== undefined);
+		if (!entitlements || entitlements.length === 0) return undefined;
+		if (entitlements.some(entitlement => entitlement.available)) return undefined;
+		return entitlements[0]?.reason ?? "the account is not entitled to priority processing";
 	}
 
 	/** Record the Claude account lane that served this session's latest Anthropic request. */
@@ -9812,11 +9867,30 @@ export class AgentSession implements SettingsScope {
 		this.#models.setServiceTierFamily(family, tier);
 	}
 
-	/** Enables or disables priority service for the active model family. */
+	/**
+	 * Enables or disables priority service for the active model family. Enabling
+	 * is an explicit retry: it forgets learned refusals so the next request
+	 * actually attempts priority, even when the account looks ineligible — the
+	 * entitlement snapshot can be stale, and the user is entitled to find out.
+	 */
 	setFastMode(enabled: boolean): boolean {
 		const changed = this.#models.setFastMode(enabled);
-		if (changed && !enabled) this.#autoFastModeSuppressed = true;
-		return changed;
+		if (!changed) return false;
+		if (enabled) {
+			this.#priorityObserved.clear();
+			const model = this.agent.state.model;
+			const reason = model ? this.#priorityEntitlementReason(model) : undefined;
+			if (reason) {
+				this.emitNotice(
+					"warning",
+					`Fast mode enabled, but ${reason}; expect the provider to refuse it.`,
+					"priority",
+				);
+			}
+		} else {
+			this.#autoFastModeSuppressed = true;
+		}
+		return true;
 	}
 
 	/** Toggles priority based on configured and currently realized state. */
@@ -9832,9 +9906,8 @@ export class AgentSession implements SettingsScope {
 		this.#autoFastModeSuppressed = false;
 	}
 
-	#resolveMainServiceTier(model: Model): ServiceTier | undefined {
-		const configuredTier = this.#models.effectiveServiceTier(model);
-		if (configuredTier !== undefined) return configuredTier;
+	/** True while a main-session user-activity lease would supply priority for `model`. */
+	#autoPriorityLeaseLive(model: Model): boolean {
 		if (
 			!cfgTierAutoFastMode.get(this.settings) ||
 			this.#autoFastModeSuppressed ||
@@ -9842,10 +9915,22 @@ export class AgentSession implements SettingsScope {
 			!serviceTierFamily(model) ||
 			!realizesPriorityServiceTier("priority", model)
 		) {
-			return undefined;
+			return false;
 		}
 		const autoFastModeActivityWindowMs = cfgTierAutoFastModeDurationMinutes.get(this.settings) * 60 * 1000;
-		return Date.now() - this.#lastUserPromptAt < autoFastModeActivityWindowMs ? "priority" : undefined;
+		return Date.now() - this.#lastUserPromptAt < autoFastModeActivityWindowMs;
+	}
+
+	#resolveMainServiceTier(model: Model): ServiceTier | undefined {
+		const configuredTier = this.#models.effectiveServiceTier(model);
+		if (configuredTier !== undefined) return configuredTier;
+		if (!this.#autoPriorityLeaseLive(model)) return undefined;
+		// The lease is an optimization, so skip it when the account is known to be
+		// ineligible — no point spending a rejected round-trip per process. Only
+		// the entitlement gates here: a transient provider refusal is the
+		// provider's own fallback to handle, and re-requesting is how a recovered
+		// tier gets noticed. An explicit `/fast on` bypasses this entirely.
+		return this.#priorityEntitlementReason(model) === undefined ? "priority" : undefined;
 	}
 
 	/** Reports whether `/fast ultra` (the OpenAI `ultrafast` tier) is selected for the active model. */
@@ -12008,8 +12093,12 @@ export class AgentSession implements SettingsScope {
 			signal,
 		});
 		// Every fresh usage snapshot doubles as the salvage-sweep heartbeat: the
-		// status line calls this every 5 minutes while the TUI is open.
-		if (reports) this.#maybeScheduleResetSweep(reports);
+		// status line calls this every 5 minutes while the TUI is open. Retain it for
+		// the priority-entitlement gate and run the reset-credit salvage sweep.
+		if (reports) {
+			this.#usageReports = reports;
+			this.#maybeScheduleResetSweep(reports);
+		}
 		return reports;
 	}
 

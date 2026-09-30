@@ -272,6 +272,7 @@ describe("AgentSession eager todo enforcement", () => {
 		expect(observedCalls[0]?.messageRoles).toEqual(["developer", "user"]);
 		expect(observedCalls[0]?.lastMessageText).toBe("inspect the parser implementation");
 	});
+
 	it("initializes todos once, then continues within the same user turn", async () => {
 		scriptedResponses = [
 			createToolCallAssistantMessage("todo", {
