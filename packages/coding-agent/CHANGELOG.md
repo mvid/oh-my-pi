@@ -10,12 +10,16 @@
 
 - Added opt-in `tier.autoFastMode` and `tier.autoFastModeDurationMinutes` settings for temporary priority processing after primary-session user prompts ([#7207](https://github.com/can1357/oh-my-pi/pull/7207) by [@mvid](https://github.com/mvid)).
 - Added opt-in `settings.autoRestartOnUpdate` so persisted interactive sessions resume after a stable executable replacement, retaining unsaved editor text ([#7748](https://github.com/can1357/oh-my-pi/pull/7748) by [@mvid](https://github.com/mvid)).
+- Added `/reload-config` to re-read global and overlay configuration into a running session, reporting which settings took effect and whether the model was rebound ([#7749](https://github.com/can1357/oh-my-pi/pull/7749) by [@mvid](https://github.com/mvid)).
+- Added opt-in `settings.hotReload` to apply outside configuration edits at safe boundaries before the next turn ([#7749](https://github.com/can1357/oh-my-pi/pull/7749) by [@mvid](https://github.com/mvid)).
+- Added a live default-role model rebind that preserves explicit, restored, and manually selected models ([#7749](https://github.com/can1357/oh-my-pi/pull/7749) by [@mvid](https://github.com/mvid)).
 - RPC `open_session` and `switch_session` accept an optional `provider`/`modelId` pair that binds the session to that model instead of its saved one, as `--model` does at startup; `RpcClient.openSession()`/`switchSession()` and the Python client's `open_session()`/`switch_session()` take it too ([#13689](https://github.com/can1357/oh-my-pi/pull/13689) by [@alphastorm](https://github.com/alphastorm))
 - Added `compat.statefulResponses` to `models.yml`, so a provider or model can opt into or out of stored Responses chaining without the process-wide `PI_OPENAI_STATEFUL` ([#13686](https://github.com/can1357/oh-my-pi/pull/13686) by [@alphastorm](https://github.com/alphastorm)).
 - Added the `app.stt.pushToTalk` keybinding, defaulting to `Space`, so push-to-talk can be remapped or disabled independently from speech-to-text and `app.stt.toggle` ([#6592](https://github.com/can1357/oh-my-pi/pull/6592) by [@anatoli-tsinovoy](https://github.com/anatoli-tsinovoy)).
 
 ### Changed
 
+- Configuration reloads now refresh advisor enablement, status-line settings, and approval policy before direct or mounted tool dispatch ([#7749](https://github.com/can1357/oh-my-pi/pull/7749) by [@mvid](https://github.com/mvid)).
 - Bash commands that print binary or other non-UTF-8 output no longer stall while their output is decoded ([#14454](https://github.com/can1357/oh-my-pi/pull/14454) by [@H4vC](https://github.com/H4vC))
 - `@` file mentions autocomplete faster in large repositories ([#14454](https://github.com/can1357/oh-my-pi/pull/14454) by [@H4vC](https://github.com/H4vC))
 - Large mermaid flowcharts and state diagrams render much faster while a response streams ([#14454](https://github.com/can1357/oh-my-pi/pull/14454) by [@H4vC](https://github.com/H4vC))
