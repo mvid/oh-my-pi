@@ -14,6 +14,9 @@
 - Added opt-in `settings.hotReload` to apply outside configuration edits at safe boundaries before the next turn ([#7749](https://github.com/can1357/oh-my-pi/pull/7749) by [@mvid](https://github.com/mvid)).
 - Added a live default-role model rebind that preserves explicit, restored, and manually selected models ([#7749](https://github.com/can1357/oh-my-pi/pull/7749) by [@mvid](https://github.com/mvid)).
 - Added saved `/panel` roles with independent family-diverse or named-persona lineups for isolated read-only participants ([#7750](https://github.com/can1357/oh-my-pi/pull/7750) by [@mvid](https://github.com/mvid)).
+- Added a blocked fast-mode status for provider refusals and ineligible accounts, with `/fast status` reporting the same state ([#7751](https://github.com/can1357/oh-my-pi/pull/7751) by [@mvid](https://github.com/mvid)).
+- Added Anthropic priority entitlement to usage reports so automatic fast mode skips known-ineligible accounts ([#7751](https://github.com/can1357/oh-my-pi/pull/7751) by [@mvid](https://github.com/mvid)).
+- Added OpenAI priority downgrade detection without treating Codex service-tier echoes as served-tier evidence ([#7751](https://github.com/can1357/oh-my-pi/pull/7751) by [@mvid](https://github.com/mvid)).
 - RPC `open_session` and `switch_session` accept an optional `provider`/`modelId` pair that binds the session to that model instead of its saved one, as `--model` does at startup; `RpcClient.openSession()`/`switchSession()` and the Python client's `open_session()`/`switch_session()` take it too ([#13689](https://github.com/can1357/oh-my-pi/pull/13689) by [@alphastorm](https://github.com/alphastorm))
 - Added `compat.statefulResponses` to `models.yml`, so a provider or model can opt into or out of stored Responses chaining without the process-wide `PI_OPENAI_STATEFUL` ([#13686](https://github.com/can1357/oh-my-pi/pull/13686) by [@alphastorm](https://github.com/alphastorm)).
 - Added the `app.stt.pushToTalk` keybinding, defaulting to `Space`, so push-to-talk can be remapped or disabled independently from speech-to-text and `app.stt.toggle` ([#6592](https://github.com/can1357/oh-my-pi/pull/6592) by [@anatoli-tsinovoy](https://github.com/anatoli-tsinovoy)).
@@ -21,6 +24,7 @@
 ### Changed
 
 - Configuration reloads now refresh advisor enablement, status-line settings, and approval policy before direct or mounted tool dispatch ([#7749](https://github.com/can1357/oh-my-pi/pull/7749) by [@mvid](https://github.com/mvid)).
+- Bumped the Anthropic usage-report cache key so older processes cannot keep refilling entitlement-free cached reports ([#7751](https://github.com/can1357/oh-my-pi/pull/7751) by [@mvid](https://github.com/mvid)).
 - Bash commands that print binary or other non-UTF-8 output no longer stall while their output is decoded ([#14454](https://github.com/can1357/oh-my-pi/pull/14454) by [@H4vC](https://github.com/H4vC))
 - `@` file mentions autocomplete faster in large repositories ([#14454](https://github.com/can1357/oh-my-pi/pull/14454) by [@H4vC](https://github.com/H4vC))
 - Large mermaid flowcharts and state diagrams render much faster while a response streams ([#14454](https://github.com/can1357/oh-my-pi/pull/14454) by [@H4vC](https://github.com/H4vC))
