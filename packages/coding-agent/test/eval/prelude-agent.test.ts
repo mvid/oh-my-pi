@@ -23,12 +23,15 @@ function loadPrelude(callTool: (name: string, args: unknown) => Promise<unknown>
 type AgentHelper = (prompt: string, opts?: Record<string, unknown>) => Promise<unknown>;
 
 describe("eval js agent() handle", () => {
-	it("returns an AgentHandle carrying the bridge id, agent name, and agent:// uri", async () => {
+	it("returns a handle and exposes served identity only after settlement", async () => {
 		let seenName: string | undefined;
 		let seenArgs: Record<string, unknown> | undefined;
 		const sandbox = loadPrelude(async (name, args) => {
 			seenName = name;
 			seenArgs = args as Record<string, unknown>;
+			if (name === "__wait__") {
+				return { items: [{ status: "completed", text: "done", model: "openai/gpt-served", family: "openai" }] };
+			}
 			return { id: "abc123", agent: "task" };
 		});
 		const handle = (await (sandbox.agent as AgentHelper)("say hi", {
@@ -40,6 +43,10 @@ describe("eval js agent() handle", () => {
 		expect(handle.id).toBe("abc123");
 		expect(handle.agent).toBe("task");
 		expect(handle.handle).toBe("agent://abc123");
+		expect(handle.model).toBeUndefined();
+		expect(await (handle.wait as () => Promise<unknown>)()).toBe("done");
+		expect(handle.model).toBe("openai/gpt-served");
+		expect(handle.family).toBe("openai");
 	});
 
 	it("maps positional args onto named options in order", async () => {
