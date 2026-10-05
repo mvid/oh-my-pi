@@ -126,6 +126,21 @@ describe("InteractiveMode deferred command preview", () => {
 		mode.presentCommandOutput(new Text("advisor panel", 1, 0));
 		expect(noticeText(mode)).toContain("2 command outputs");
 	});
+	it("previews the newest command when earlier output fills the preview", async () => {
+		const { mode, setStreaming } = await createHarness();
+		setStreaming(true);
+		mode.presentCommandOutput(new Text(Array.from({ length: 200 }, (_, i) => "old row " + i).join("\n"), 1, 0));
+		mode.presentCommandOutput(new Text("newly requested status", 1, 0));
+
+		const preview = noticeText(mode);
+		expect(preview).toContain("newly requested status");
+		expect(preview).not.toContain("old row");
+		expect(preview).toContain("newest of 2 command outputs");
+		setStreaming(false);
+		mode.flushPendingCommandOutput();
+		expect(transcriptText(mode)).toContain("old row 0");
+		expect(transcriptText(mode)).toContain("newly requested status");
+	});
 
 	it("caps a tall panel so the prompt stays on screen", async () => {
 		const { mode, setStreaming } = await createHarness();
