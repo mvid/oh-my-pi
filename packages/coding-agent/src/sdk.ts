@@ -2005,6 +2005,8 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 		}),
 	);
 	let model = options.model;
+	// Track selection provenance; matching the default does not make a model role-owned.
+	let modelFromDefaultRole = false;
 	let modelFallbackMessage: string | undefined;
 	let initialRetryFallback: InitialRetryFallbackState | undefined;
 	// Identify session model strings to restore in fallback order. We do an
@@ -2046,6 +2048,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 			// defaultRoleSpec.model already comes from modelRegistry.getAvailable(),
 			// so re-validating auth here just repeats the expensive lookup path.
 			model = settingsDefaultModel;
+			modelFromDefaultRole = true;
 		});
 	}
 
@@ -2802,6 +2805,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 					if (restored) {
 						const restoredModel = restored.model;
 						model = restoredModel;
+						modelFromDefaultRole = false;
 						modelFallbackMessage = undefined;
 						restoredSessionModelIndex = i;
 						restoredSessionThinkingLevel = restored.thinkingLevel;
@@ -3183,6 +3187,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 				defaultRoleSpec = reResolvedRoleSpec;
 				const resolvedDefaultModel = reResolvedRoleSpec.model;
 				model = resolvedDefaultModel;
+				modelFromDefaultRole = true;
 				modelFallbackMessage = undefined;
 				// Recompute the thinking level against the now-real model.
 				// `pickInitialThinkingLevel` closes over `defaultRoleSpec`,
@@ -4591,6 +4596,7 @@ async function createAgentSessionScoped(options: CreateAgentSessionOptions): Pro
 			thinkingLevelCeiling: options.thinkingLevelCeiling,
 			initialRetryFallback,
 			deferRetryFallbackValidation: options.deferRetryFallbackValidation,
+			modelFromDefaultRole,
 			prewalk,
 			planYolo: options.planYolo,
 			serviceTierByFamily: initialServiceTierByFamily,
