@@ -47,6 +47,7 @@
 - Sped up image resizing up to ~2.6× by decoding the source once ([#14720](https://github.com/can1357/oh-my-pi/pull/14720) by [@H4vC](https://github.com/H4vC))
 - Stopped text prediction from touching the filesystem on every keystroke while SmolLM weights download ([#14720](https://github.com/can1357/oh-my-pi/pull/14720) by [@H4vC](https://github.com/H4vC))
 - Reduced CPU during live voice calls and dictation by avoiding per-frame audio buffer copies ([#14719](https://github.com/can1357/oh-my-pi/pull/14719) by [@H4vC](https://github.com/H4vC))
+- Approval checks reread persisted policy before direct or mounted tool dispatch ([#7749](https://github.com/can1357/oh-my-pi/pull/7749) by [@mvid](https://github.com/mvid))
 ### Fixed
 
 - Fixed `/new` keeping plan mode (and its plan-role model) or goal mode active in the new session ([#14653](https://github.com/can1357/oh-my-pi/issues/14653))
