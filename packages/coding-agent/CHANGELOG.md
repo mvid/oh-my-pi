@@ -7,6 +7,8 @@
 - Added opt-in `tier.autoFastMode` and `tier.autoFastModeDurationMinutes` settings for temporary priority processing after primary-session user prompts ([#7207](https://github.com/can1357/oh-my-pi/pull/7207) by [@mvid](https://github.com/mvid)).
 - Added opt-in `settings.autoRestartOnUpdate` so persisted interactive sessions resume after a stable executable replacement, retaining unsaved editor text ([#7748](https://github.com/can1357/oh-my-pi/pull/7748) by [@mvid](https://github.com/mvid)).
 - Files the write tool creates now preview the way the matching code blocks in replies do, building up while the write streams: `.svg` as an image and Mermaid (`.mmd`, `.mermaid`) as a diagram under the write card, and in Tern also 3D models (`.obj`, `.ply`, `.wrl`, `.x3dv`, `.stl`, `.gltf`, `.usda`); in Tern an SVG write now draws like an SVG figure in a reply
+- Added `/reload-config` to reread persisted configuration in a running session and report changed settings or a reload error ([#7749](https://github.com/can1357/oh-my-pi/pull/7749) by [@mvid](https://github.com/mvid))
+- Sessions following the default model role now adopt watched role changes while preserving explicit, restored, and manually selected models ([#7749](https://github.com/can1357/oh-my-pi/pull/7749) by [@mvid](https://github.com/mvid))
 
 ### Changed
 
@@ -47,6 +49,7 @@
 - Sped up image resizing up to ~2.6× by decoding the source once ([#14720](https://github.com/can1357/oh-my-pi/pull/14720) by [@H4vC](https://github.com/H4vC))
 - Stopped text prediction from touching the filesystem on every keystroke while SmolLM weights download ([#14720](https://github.com/can1357/oh-my-pi/pull/14720) by [@H4vC](https://github.com/H4vC))
 - Reduced CPU during live voice calls and dictation by avoiding per-frame audio buffer copies ([#14719](https://github.com/can1357/oh-my-pi/pull/14719) by [@H4vC](https://github.com/H4vC))
+- Approval checks reread persisted policy before direct or mounted tool dispatch ([#7749](https://github.com/can1357/oh-my-pi/pull/7749) by [@mvid](https://github.com/mvid))
 ### Fixed
 
 - Auto-restart now waits while the executable is missing or mid-build instead of relaunching an absent path, and binary builds land via an atomic rename ([#7748](https://github.com/can1357/oh-my-pi/pull/7748) by [@mvid](https://github.com/mvid)).
