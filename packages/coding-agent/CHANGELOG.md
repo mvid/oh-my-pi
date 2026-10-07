@@ -65,6 +65,7 @@
 ### Fixed
 
 - Auto-restart now waits while the executable is missing or mid-build instead of relaunching an absent path, and binary builds land via an atomic rename ([#7748](https://github.com/can1357/oh-my-pi/pull/7748) by [@mvid](https://github.com/mvid)).
+- Fixed advisors returning to a model that refused the reviewed content (for example `Refusal (cyber)`) every five minutes; they now stay on the fallback until a compaction, handoff, or new conversation ([#14743](https://github.com/can1357/oh-my-pi/pull/14743) by [@mvid](https://github.com/mvid))
 - Fixed `/new` keeping plan mode (and its plan-role model) or goal mode active in the new session ([#14653](https://github.com/can1357/oh-my-pi/issues/14653))
 - Fixed parallel first bash calls each spawning an rc-sourcing shell ([#14680](https://github.com/can1357/oh-my-pi/pull/14680) by [@H4vC](https://github.com/H4vC))
 - Fixed the todo list's auto-clear never firing while subagents were streaming progress ([#14692](https://github.com/can1357/oh-my-pi/pull/14692) by [@H4vC](https://github.com/H4vC))
