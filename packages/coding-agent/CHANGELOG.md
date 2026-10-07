@@ -5,6 +5,7 @@
 ### Added
 
 - Added opt-in `tier.autoFastMode` and `tier.autoFastModeDurationMinutes` settings for temporary priority processing after primary-session user prompts ([#7207](https://github.com/can1357/oh-my-pi/pull/7207) by [@mvid](https://github.com/mvid)).
+- Added opt-in `settings.autoRestartOnUpdate` so persisted interactive sessions resume after a stable executable replacement, retaining unsaved editor text ([#7748](https://github.com/can1357/oh-my-pi/pull/7748) by [@mvid](https://github.com/mvid)).
 - Files the write tool creates now preview the way the matching code blocks in replies do, building up while the write streams: `.svg` as an image and Mermaid (`.mmd`, `.mermaid`) as a diagram under the write card, and in Tern also 3D models (`.obj`, `.ply`, `.wrl`, `.x3dv`, `.stl`, `.gltf`, `.usda`); in Tern an SVG write now draws like an SVG figure in a reply
 
 ### Changed
@@ -48,6 +49,7 @@
 - Reduced CPU during live voice calls and dictation by avoiding per-frame audio buffer copies ([#14719](https://github.com/can1357/oh-my-pi/pull/14719) by [@H4vC](https://github.com/H4vC))
 ### Fixed
 
+- Auto-restart now waits while the executable is missing or mid-build instead of relaunching an absent path, and binary builds land via an atomic rename ([#7748](https://github.com/can1357/oh-my-pi/pull/7748) by [@mvid](https://github.com/mvid)).
 - Fixed `/new` keeping plan mode (and its plan-role model) or goal mode active in the new session ([#14653](https://github.com/can1357/oh-my-pi/issues/14653))
 - Fixed parallel first bash calls each spawning an rc-sourcing shell ([#14680](https://github.com/can1357/oh-my-pi/pull/14680) by [@H4vC](https://github.com/H4vC))
 - Fixed the todo list's auto-clear never firing while subagents were streaming progress ([#14692](https://github.com/can1357/oh-my-pi/pull/14692) by [@H4vC](https://github.com/H4vC))
