@@ -77,6 +77,7 @@
 - Fixed documents served as `application/octet-stream` being downloaded twice ([#14708](https://github.com/can1357/oh-my-pi/pull/14708) by [@H4vC](https://github.com/H4vC))
 - Fixed collab TUI guests rebuilding the transcript per token ([#14715](https://github.com/can1357/oh-my-pi/pull/14715) by [@H4vC](https://github.com/H4vC))
 - Late advisor concerns can use `advisor.lateConcern: steer` to request one continuation after a final text answer; terminal-unwind nits remain passive and stop suppression and interrupt immunity still apply.
+- `/advisor` status renders immediately with cached quota data while refreshing usage in the background.
 
 ## [18.7.0] - 2026-10-06
 
