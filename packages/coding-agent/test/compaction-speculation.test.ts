@@ -151,6 +151,7 @@ describe("async speculative compaction", () => {
 			syncTodoPhasesFromBranch: () => {},
 			resetAdvisorRuntimes: () => {},
 			rebaseAfterCompaction: () => {},
+			releaseRetryFallbackRefusalPin: () => {},
 			recordAnchoredHistoryRewrite: () => {},
 			getContextBreakdown: () => undefined,
 			getContextUsage: () => undefined,
