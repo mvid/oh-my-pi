@@ -16,6 +16,8 @@
 - Added a `display.showUsageModels` setting (default `true`) that opts out of the "Models with usage data" list in `/usage`, for users who only want the quota bars ([#7852](https://github.com/can1357/oh-my-pi/pull/7852) by [@mvid](https://github.com/mvid)).
 - Added opt-in `eval.speculation.enabled` to start literal `completion()` calls while eval cells stream, with `eval.speculation.maxPerTurn` limiting speculative requests.
 - Added a `display.showZeroUsageMeters` setting to hide untouched supplemental model and tier quota meters from live usage reports ([#10423](https://github.com/can1357/oh-my-pi/pull/10423) by [@mvid](https://github.com/mvid)).
+- Agent frontmatter `restrictTools` provides a hard tool allowlist for subagents and disables MCP, extension tools, and custom tools.
+- Eval `agent()` calls can set a per-call wall-clock timeout, and handle results report the served model and canonical model family.
 
 ### Changed
 
