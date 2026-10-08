@@ -20,6 +20,9 @@
 - Eval `agent()` calls can set a per-call wall-clock timeout, and handle results report the served model and canonical model family.
 - Added `tui.tmuxWindowNameColor` to tint the session's tmux status entry with its accent color, restoring the window's prior styles on exit.
 - Files the write tool creates now preview the way the matching code blocks in replies do, building up while the write streams: `.svg` as an image and Mermaid (`.mmd`, `.mermaid`) as a diagram under the write card, and in Tern also 3D models (`.obj`, `.ply`, `.wrl`, `.x3dv`, `.stl`, `.gltf`, `.usda`); in Tern an SVG write now draws like an SVG figure in a reply
+- Panel members accept a ranked candidate list, so a seat falls through to the next model when its primary is unavailable and records which candidate served.
+- Panel roles accept a `minFamilies` floor on distinct resolved model families, so a lineup that collapses onto fewer lineages than required never dispatches.
+- Panel runs now carry a `lineupHash` naming the served routes and the policy that admitted them, and extension packages can resolve rosters through `resolvePanelLineup`.
 
 ### Changed
 
