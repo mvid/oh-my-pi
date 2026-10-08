@@ -42,6 +42,7 @@
 - Auto-restart now waits while the executable is missing or mid-build instead of relaunching an absent path, and binary builds land via an atomic rename ([#7748](https://github.com/can1357/oh-my-pi/pull/7748) by [@mvid](https://github.com/mvid)).
 - Late advisor concerns can use `advisor.lateConcern: steer` to request one continuation after a final text answer; terminal-unwind nits remain passive and stop suppression and interrupt immunity still apply.
 - `/advisor` status renders immediately with cached quota data while refreshing usage in the background.
+- Configured default model fallback chains now select their first available model at startup instead of an unrelated authenticated provider.
 
 ## [18.8.3] - 2026-10-07
 
