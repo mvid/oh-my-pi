@@ -13,6 +13,7 @@
 - Added Anthropic priority entitlement to usage reports so automatic fast mode skips known-ineligible accounts ([#7751](https://github.com/can1357/oh-my-pi/pull/7751) by [@mvid](https://github.com/mvid)).
 - Added OpenAI priority downgrade detection without treating Codex service-tier echoes as served-tier evidence ([#7751](https://github.com/can1357/oh-my-pi/pull/7751) by [@mvid](https://github.com/mvid)).
 - Added `tui.tmuxWindowName` (default off), which renames the enclosing tmux window to the active session name and restores the original name and `automatic-rename` setting on every exit path ([#7850](https://github.com/can1357/oh-my-pi/pull/7850) by [@mvid](https://github.com/mvid)).
+- Added a `display.showUsageModels` setting (default `true`) that opts out of the "Models with usage data" list in `/usage`, for users who only want the quota bars ([#7852](https://github.com/can1357/oh-my-pi/pull/7852) by [@mvid](https://github.com/mvid)).
 
 ### Changed
 
