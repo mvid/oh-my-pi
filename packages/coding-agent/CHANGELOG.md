@@ -44,6 +44,7 @@
 - Late advisor concerns can use `advisor.lateConcern: steer` to request one continuation after a final text answer; terminal-unwind nits remain passive and stop suppression and interrupt immunity still apply.
 - `/advisor` status renders immediately with cached quota data while refreshing usage in the background.
 - Configured default model fallback chains now select their first available model at startup instead of an unrelated authenticated provider.
+- Fixed advisors returning to a model that refused the reviewed content (for example `Refusal (cyber)`) every five minutes; they now stay on the fallback until a compaction, handoff, or new conversation ([#14743](https://github.com/can1357/oh-my-pi/pull/14743) by [@mvid](https://github.com/mvid))
 
 ## [18.8.3] - 2026-10-07
 
