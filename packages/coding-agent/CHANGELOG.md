@@ -18,6 +18,8 @@
 - Added a `display.showZeroUsageMeters` setting to hide untouched supplemental model and tier quota meters from live usage reports ([#10423](https://github.com/can1357/oh-my-pi/pull/10423) by [@mvid](https://github.com/mvid)).
 - Agent frontmatter `restrictTools` provides a hard tool allowlist for subagents and disables MCP, extension tools, and custom tools.
 - Eval `agent()` calls can set a per-call wall-clock timeout, and handle results report the served model and canonical model family.
+- Added `tui.tmuxWindowNameColor` to tint the session's tmux status entry with its accent color, restoring the window's prior styles on exit.
+- Files the write tool creates now preview the way the matching code blocks in replies do, building up while the write streams: `.svg` as an image and Mermaid (`.mmd`, `.mermaid`) as a diagram under the write card, and in Tern also 3D models (`.obj`, `.ply`, `.wrl`, `.x3dv`, `.stl`, `.gltf`, `.usda`); in Tern an SVG write now draws like an SVG figure in a reply
 
 ### Changed
 
