@@ -376,6 +376,7 @@
 
 ## [18.8.4] - 2026-10-08
 - Added opt-in `tier.autoFastMode` and `tier.autoFastModeDurationMinutes` settings for temporary priority processing after primary-session user prompts ([#7207](https://github.com/can1357/oh-my-pi/pull/7207) by [@mvid](https://github.com/mvid)).
+- Added opt-in `settings.autoRestartOnUpdate` so persisted interactive sessions resume after a stable executable replacement, retaining unsaved editor text ([#7748](https://github.com/can1357/oh-my-pi/pull/7748) by [@mvid](https://github.com/mvid)).
 
 ### Changed
 
@@ -408,6 +409,7 @@
 - Fixed quadratic slowdown in `omp cleanse` on large tsc/clippy/golangci output ([#14706](https://github.com/can1357/oh-my-pi/pull/14706) by [@H4vC](https://github.com/H4vC))
 - Fixed documents served as `application/octet-stream` being downloaded twice ([#14708](https://github.com/can1357/oh-my-pi/pull/14708) by [@H4vC](https://github.com/H4vC))
 - Fixed collab TUI guests rebuilding the transcript per token ([#14715](https://github.com/can1357/oh-my-pi/pull/14715) by [@H4vC](https://github.com/H4vC))
+- Auto-restart now waits while the executable is missing or mid-build instead of relaunching an absent path, and binary builds land via an atomic rename ([#7748](https://github.com/can1357/oh-my-pi/pull/7748) by [@mvid](https://github.com/mvid)).
 
 ## [18.8.3] - 2026-10-07
 
