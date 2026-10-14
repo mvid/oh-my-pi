@@ -82,6 +82,23 @@ A personas role has at least two members, each with a valid persona. Repeated pe
 
 Every `model` is an exact selector or an ordinary model-role reference such as `@plan`, without a `:thinking` suffix. Its optional `thinking` field is the only panel-member effort override; when omitted, the selected model or ordinary model role supplies its configured default. The parser rejects a suffixed model selector and invalid effort before dispatch.
 
+A member's `model` may instead be a candidate list in priority order, or carry an ordered `fallbacks` list beside a single primary. Resolution takes the first candidate that resolves to an available, authenticated model, exactly as a prioritized agent `model` list does, and records the winning candidate as `requestedSelector` beside the served `selector`. Writing a list and a separate `fallbacks` key for the same member is rejected as ambiguous.
+
+An optional `minFamilies` sets a floor on distinct resolved families that fails resolution when a lineup collapses below it, which is how a `personas` role asks for diversity it does not get by strategy. A floor larger than the member count is rejected at parse time. Where a lineup claims diversity — one family per seat under `independent`, or any floor — an unknown family fails closed; a single-seat lineup claims none, so an unclassified model resolves.
+
+```yaml
+panel:
+  roles:
+    frontier:
+      strategy: independent
+      minFamilies: 3
+      members:
+        - model: [synthetic/hf:zai-org/GLM-5.2, fireworks/glm-5.2]
+          thinking: high
+```
+
+Every resolved lineup carries a `lineupHash`: a `sha256:` digest over the served route of each seat plus the policy that admitted it. An unused fallback does not change it; a fallback that actually served does. Extension packages resolve rosters through `resolvePanelLineup` from `@oh-my-pi/pi-coding-agent/panel` and store that hash so a result names the panel that produced it. The `omp --agent-bridge-contract` probe reports this capability as `panelLineupFreeze`.
+
 The contexts are unambiguous: the command's first `@name` resolves `panel.roles.<name>`, whereas `members[].model: "@plan"` resolves the existing ordinary model role. Role IDs are stable enough to appear in session history.
 
 ### User experience
