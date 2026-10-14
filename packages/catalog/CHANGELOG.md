@@ -147,6 +147,10 @@
 ### Fixed
 
 - Fixed Claude Haiku 5.5 opening at its full 1M window on Amazon Bedrock, Google Vertex, and other non-Anthropic hosts: every priced host now carries the 5x pricing band above 100K input tokens, so the window stays at 100K unless extended context is on ([#14903](https://github.com/can1357/oh-my-pi/pull/14903) by [@H4vC](https://github.com/H4vC)).
+### Fixed
+
+- GPT-5.6 Sol, Terra, and Luna now use their 1M context windows on Bedrock Mantle.
+- Cursor GPT-5.6 fast lanes now use the documented 1M context window.
 
 ## [18.8.3] - 2026-10-07
 
