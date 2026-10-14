@@ -451,10 +451,7 @@ function assertDepthAndSpawnAllowed(request: StructuredSubagentRequest, agentNam
 }
 
 /** The per-call gate's refusal for `invocationKind` calls, or `undefined` when `task.perCallModel` allows them. */
-function perCallModelDisabledReason(
-	settings: Settings,
-	invocationKind: "task" | "eval" | "panel",
-): string | undefined {
+function perCallModelDisabledReason(settings: Settings, invocationKind: "task" | "eval" | "panel"): string | undefined {
 	if (invocationKind !== "panel" && perCallModelEnabled(settings, invocationKind)) return undefined;
 	const mode = cfgTaskPerCallModel.get(settings);
 	const operatorMode = cfgTaskPerCallModel.get(settings.grantAuthority());
