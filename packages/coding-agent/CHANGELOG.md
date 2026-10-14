@@ -436,6 +436,7 @@
 - Fixed documents served as `application/octet-stream` being downloaded twice ([#14708](https://github.com/can1357/oh-my-pi/pull/14708) by [@H4vC](https://github.com/H4vC))
 - Fixed collab TUI guests rebuilding the transcript per token ([#14715](https://github.com/can1357/oh-my-pi/pull/14715) by [@H4vC](https://github.com/H4vC))
 - Auto-restart now waits while the executable is missing or mid-build instead of relaunching an absent path, and binary builds land via an atomic rename ([#7748](https://github.com/can1357/oh-my-pi/pull/7748) by [@mvid](https://github.com/mvid)).
+- Late advisor concerns can use `advisor.lateConcern: steer` to request one continuation after a final text answer; terminal-unwind nits remain passive and stop suppression and interrupt immunity still apply.
 
 ## [18.8.3] - 2026-10-07
 
