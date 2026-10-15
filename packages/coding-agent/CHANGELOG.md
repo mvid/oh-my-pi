@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Extension packages can read session panel roles through the exported `cfgPanel` setting.
+
 ## [18.11.0] - 2026-10-14
 
 ### Added

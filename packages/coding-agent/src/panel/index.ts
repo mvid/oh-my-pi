@@ -35,6 +35,7 @@ export {
 	resolvePanelLineup,
 	runPanel,
 } from "./runtime";
+export * from "./settings";
 export { formatPanelCompletionStatus, formatPanelProgress } from "./status";
 export {
 	PANEL_MAX_MEMBERS,
