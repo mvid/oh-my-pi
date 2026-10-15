@@ -39,6 +39,7 @@
 ### Fixed
 - Late advisor concerns can use `advisor.lateConcern: steer` to request one continuation after a final text answer; terminal-unwind nits remain passive and stop suppression and interrupt immunity still apply. ([#15775](https://github.com/can1357/oh-my-pi/pull/15775) by [@mvid](https://github.com/mvid)).
 - Loading a large past session now stops at its byte limit without parsing a truncated trailing record, so the tail can no longer be fed to the JSON parser mid-record ([#15778](https://github.com/can1357/oh-my-pi/pull/15778) by [@mvid](https://github.com/mvid)).
+- `/advisor` status renders immediately with cached quota data while refreshing usage in the background. ([#15780](https://github.com/can1357/oh-my-pi/pull/15780) by [@mvid](https://github.com/mvid)).
 
 - Fixed browser `tab.click("text/…")` timing out when the match was below the fold or the tab was in the background ([#14864](https://github.com/can1357/oh-my-pi/pull/14864) by [@alnaggar-dev](https://github.com/alnaggar-dev), [#15496](https://github.com/can1357/oh-my-pi/pull/15496) by [@will-bogusz](https://github.com/will-bogusz))
 - Fixed browser clicks the page never received, such as on a disabled control or inside an `inert` subtree, reporting success; the call now fails saying the browser did not deliver the click ([#15496](https://github.com/can1357/oh-my-pi/pull/15496) by [@will-bogusz](https://github.com/will-bogusz))
