@@ -47,6 +47,8 @@
 - Grep and AST Grep headers show the search scope after the pattern, errors show the tool title and pattern, and collapsed AST Grep drops `meta:` rows ([#18105](https://github.com/can1357/oh-my-pi/pull/18105) by [@JustasMasiulis](https://github.com/JustasMasiulis))
 - AST Edit's header shows the search scope; the `proposed` state and replacement counts move to the card's bottom border ([#18105](https://github.com/can1357/oh-my-pi/pull/18105) by [@JustasMasiulis](https://github.com/JustasMasiulis))
 - Centered sheets and dialogs on narrow native terminals fill the pane only once their content reaches half the screen height.
+- Added `modelEnds` to `GroupedFileSection`: per file, the model-line index just past its last line, so a caller cutting the output can tell which files it shows whole ([#16594](https://github.com/can1357/oh-my-pi/pull/16594) by [@will-bogusz](https://github.com/will-bogusz))
+- Added `createSupersededAnswerDisclosure` and `supersededAnswerEntryIds` for collapsing answers superseded after advisor review, and `ChatTranscriptBuilder.setSuperseded` for branch outlines
 
 ### Fixed
 
