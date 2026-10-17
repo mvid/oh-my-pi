@@ -2032,6 +2032,9 @@ export class EventController {
 			this.ctx.statusLine.invalidate();
 			this.ctx.ui.requestRender();
 		}
+		if (event.message.role === "assistant" && event.message.supersedesEntryId) {
+			this.ctx.rebuildChatFromMessages({ reuseSettledComponents: true });
+		}
 		this.ctx.ui.requestRender();
 	}
 
