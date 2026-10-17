@@ -68,6 +68,32 @@ export function isUserRequestEntry(entry: TranscriptEntryLike | { type: string }
 	return false;
 }
 
+/** Resolve display-only answer replacements within one ordered root-to-leaf path. */
+export function supersededAnswerEntryIds(path: readonly TranscriptEntryLike[]): Set<string> {
+	let run = 0;
+	const answers = new Map<string, number>();
+	const out = new Set<string>();
+	for (const entry of path) {
+		if (isUserRequestEntry(entry)) {
+			run++;
+			continue;
+		}
+		if (entry.type !== "message" || entry.message.role !== "assistant") continue;
+		const message = entry.message;
+		if (
+			message.stopReason !== "stop" ||
+			message.content.some(block => block.type === "toolCall") ||
+			!message.content.some(block => block.type === "text" && block.text.trim().length > 0)
+		) {
+			continue;
+		}
+		const target = message.supersedesEntryId;
+		if (typeof target === "string" && target !== entry.id && answers.get(target) === run) out.add(target);
+		answers.set(entry.id, run);
+	}
+	return out;
+}
+
 /**
  * Recent transcript tail starting at a user-request boundary, so tool calls
  * and results stay together. ChatTranscriptBuilder drops a tool result whose

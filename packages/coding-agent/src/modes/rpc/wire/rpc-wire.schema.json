@@ -1305,6 +1305,9 @@
 				},
 				"completedAt": {
 					"type": "number"
+				},
+				"supersedesEntryId": {
+					"type": "string"
 				}
 			},
 			"required": [
