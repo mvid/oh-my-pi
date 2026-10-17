@@ -735,7 +735,10 @@ function buildExecutorOptions(
 			: resolveAutoloadSkills(session, policy.agent);
 	const localProtocolOptions = sessionLocalProtocolOptions(session);
 	const restrictToolNames =
-		preparedSession !== undefined || policy.restrictToolNames || session.restrictToolNames === true;
+		preparedSession !== undefined ||
+		policy.restrictToolNames ||
+		session.restrictToolNames === true ||
+		policy.effectiveAgent.restrictTools === true;
 	const enableMCP = !restrictToolNames && policy.enableMCP;
 	return {
 		cwd: session.cwd,

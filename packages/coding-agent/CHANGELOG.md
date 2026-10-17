@@ -192,6 +192,8 @@
 - Added a `display.showZeroUsageMeters` setting to hide untouched supplemental model and tier quota meters from live usage reports ([#15784](https://github.com/can1357/oh-my-pi/pull/15784) by [@mvid](https://github.com/mvid)).
 - Added opt-in `eval.speculation.enabled` to start literal `completion()` calls while eval cells stream, with `eval.speculation.maxPerTurn` limiting speculative requests. ([#15773](https://github.com/can1357/oh-my-pi/pull/15773) by [@mvid](https://github.com/mvid)).
 - `/reload-plugins` now re-imports extension modules, so editing an extension no longer requires a session restart ([#15774](https://github.com/can1357/oh-my-pi/pull/15774) by [@mvid](https://github.com/mvid)).
+- Agent frontmatter `restrictTools` provides a hard tool allowlist for subagents and disables MCP, extension tools, and custom tools. ([#15776](https://github.com/can1357/oh-my-pi/pull/15776) by [@mvid](https://github.com/mvid)).
+- Eval `agent()` calls can set a per-call wall-clock timeout, and handle results report the served model and canonical model family. ([#15776](https://github.com/can1357/oh-my-pi/pull/15776) by [@mvid](https://github.com/mvid)).
 
 - Added a microphone button beside Send in Tern: click to record, click Stop to finish, then review and submit the transcription yourself. Clicking while it says **Starting…** cancels a slow first model load ([#15759](https://github.com/can1357/oh-my-pi/pull/15759) by [@daaximus](https://github.com/daaximus)).
 - Added local Nemotron streaming dictation: words appear while you speak, and the microphone waits for the recognizer to be ready before recording ([#15759](https://github.com/can1357/oh-my-pi/pull/15759) by [@daaximus](https://github.com/daaximus)).
