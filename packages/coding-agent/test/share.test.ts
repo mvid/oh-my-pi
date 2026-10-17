@@ -10,6 +10,7 @@ import {
 	shareSession,
 } from "../src/export/share";
 import { SecretObfuscator } from "../src/secrets/obfuscator";
+import { SessionAnonymizer } from "../src/session/session-anonymizer";
 import type { SessionEntry, SessionHeader } from "../src/session/session-entries";
 import { SessionManager } from "../src/session/session-manager";
 
@@ -130,6 +131,61 @@ describe("buildShareSnapshot", () => {
 
 		const plain = buildShareSnapshot(sm, {});
 		expect(JSON.stringify(plain)).toContain("hunter2-XYZZY");
+	});
+
+	test("preserves supersession links through anonymization, redaction and sealed sharing", async () => {
+		const entries: SessionEntry[] = ["draft", "replacement"].map((id, index) => ({
+			type: "message",
+			id,
+			parentId: index === 0 ? null : "draft",
+			timestamp: "2026-06-12T00:00:00.000Z",
+			message: {
+				role: "assistant",
+				content: [{ type: "text", text: `${id} sensitive-answer` }],
+				api: "openai-responses",
+				provider: "openai",
+				model: "test",
+				stopReason: "stop",
+				timestamp: 1,
+				usage: {
+					input: 1,
+					output: 2,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 3,
+					cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+				},
+				...(index === 1 ? { supersedesEntryId: "draft" } : {}),
+			},
+		}));
+		const anonymizer = new SessionAnonymizer();
+		const anonymized = entries.map(entry => anonymizer.entry(entry)) as SessionEntry[];
+		expect(anonymized[0]!.id).not.toBe("draft");
+		expect(anonymized[1]!.id).not.toBe("replacement");
+
+		for (const sharedEntries of [entries, anonymized]) {
+			const sm = {
+				getHeader: () => sessionData([], "x").header,
+				getEntries: () => sharedEntries,
+				getLeafId: () => sharedEntries[1]!.id,
+			} as unknown as SessionManager;
+			const snapshot = buildShareSnapshot(sm, {
+				obfuscator: new SecretObfuscator([{ type: "plain", content: "sensitive-answer" }]),
+			});
+			const key = await makeKey();
+			const { sealed } = await sealToFit(key, snapshot, SERVER_MAX_SEALED_BYTES);
+			const opened = await open(key, sealed);
+			const [draft, replacement] = opened.entries;
+			if (replacement?.type !== "message" || replacement.message.role !== "assistant") {
+				throw new Error("Shared replacement is missing");
+			}
+			expect(replacement.message.supersedesEntryId).toBe(draft!.id);
+			expect(replacement.parentId).toBe(draft!.id);
+			expect(opened.leafId).toBe(replacement.id);
+			expect(JSON.stringify(opened)).not.toContain("sensitive-answer");
+			expect(opened).toEqual(snapshot);
+		}
+		expect(JSON.stringify(entries)).toContain("sensitive-answer");
 	});
 
 	test("drops revival-only work-pool yield items from a subagent's session_init", () => {
