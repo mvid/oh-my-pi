@@ -141,6 +141,7 @@ export interface AssistantMessage {
 	duration?: number;
 	ttft?: number;
 	completedAt?: number;
+	supersedesEntryId?: string;
 }
 
 export interface ToolResultMessage {
