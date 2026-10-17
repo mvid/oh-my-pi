@@ -39,6 +39,7 @@ import {
 } from "@oh-my-pi/pi-tui/chat/read-tool-group";
 import { SkillMessageComponent } from "@oh-my-pi/pi-tui/chat/skill-message";
 import { StrippedToolCallsPlaceholder } from "@oh-my-pi/pi-tui/chat/stripped-tool-calls-placeholder";
+import { createSupersededAnswerDisclosure } from "@oh-my-pi/pi-tui/chat/superseded-answer";
 import { imageContent, textContent } from "@oh-my-pi/pi-tui/chat/transcript-entry";
 import { ToolActivityContainer } from "@oh-my-pi/pi-tui/chrome/tool-activity";
 import {
@@ -140,6 +141,7 @@ type QueuedMessages = {
 type AddMessageOptions = {
 	imageLinks?: readonly (string | undefined)[];
 	reuseSettledComponent?: boolean;
+	superseded?: boolean;
 };
 
 type ImageChipSessionManager = Pick<
@@ -422,6 +424,22 @@ export class UiHelpers {
 				break;
 			}
 			case "assistant": {
+				if (options?.superseded) {
+					const reactionTargets = [...this.ctx.chatContainer.children];
+					const disclosure = createSupersededAnswerDisclosure(() => {
+						const component = createAssistantMessageComponent(
+							this.ctx,
+							splitAssistantMessageToolTimeline(message).beforeTools,
+							getAssistantMessageLinkTargets(this.ctx),
+						);
+						component.pickReactionTarget(reactionTargets);
+						return component;
+					});
+					disclosure.setExpanded(this.ctx.toolOutputExpanded);
+					this.ctx.transcriptMessageComponents.set(message, disclosure);
+					this.ctx.chatContainer.addChild(disclosure);
+					break;
+				}
 				const cached = options?.reuseSettledComponent
 					? this.ctx.transcriptMessageComponents.get(message)
 					: undefined;
@@ -611,7 +629,10 @@ export class UiHelpers {
 			// Assistant messages need special handling for tool calls
 			if (message.role === "assistant") {
 				const timeline = splitAssistantMessageToolTimeline(message);
-				this.ctx.addMessageToChat(message, { reuseSettledComponent: options.reuseSettledComponents });
+				this.ctx.addMessageToChat(message, {
+					reuseSettledComponent: options.reuseSettledComponents,
+					superseded: sessionContext.supersededAt?.[i],
+				});
 				const lastChild = this.ctx.chatContainer.children[this.ctx.chatContainer.children.length - 1];
 				const assistantComponent = lastChild instanceof AssistantMessageComponent ? lastChild : undefined;
 				if (assistantComponent) {
@@ -621,11 +642,13 @@ export class UiHelpers {
 						const invalidation = detectCacheInvalidation(this.ctx.lastAssistantUsage, usage);
 						if (invalidation) assistantComponent.setCacheInvalidation(invalidation);
 					}
-					if (usage.cacheRead + usage.cacheWrite + usage.input > 0) {
-						this.ctx.lastAssistantUsage = usage;
-					}
-					assistantComponent.setServedModelMismatch(this.ctx.servedModelTracker.check(message));
 				}
+				const usage = message.usage;
+				if (usage.cacheRead + usage.cacheWrite + usage.input > 0) {
+					this.ctx.lastAssistantUsage = usage;
+				}
+				const servedModelMismatch = this.ctx.servedModelTracker.check(message);
+				assistantComponent?.setServedModelMismatch(servedModelMismatch);
 				const hasVisibleAssistantContent = assistantHasVisibleContent(message);
 				if (hasVisibleAssistantContent) {
 					// Rebuild reconstructs immutable history; seal (not finalize) because
