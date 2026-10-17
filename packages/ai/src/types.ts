@@ -1353,6 +1353,8 @@ export interface AssistantMessage {
 	ttft?: number; // Time to first token in milliseconds
 	/** Local wall-clock time the response finished streaming (ms since epoch); stamped by the session at message_end so prompt→yield timing never depends on provider-reported duration. */
 	completedAt?: number;
+	/** Display-only: persisted entry ID of an earlier terminal answer this one replaces. Never removes context or usage. */
+	supersedesEntryId?: string;
 }
 
 export interface ToolResultMessage<TDetails = unknown> {

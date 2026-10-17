@@ -318,6 +318,7 @@ class AssistantMessage(TypedDict):
     duration: NotRequired[float]
     ttft: NotRequired[float]
     completedAt: NotRequired[float]
+    supersedesEntryId: NotRequired[str]
 
 
 class ToolResultMessage(TypedDict):
