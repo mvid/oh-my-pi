@@ -7864,6 +7864,7 @@ export class InteractiveMode implements InteractiveModeContext {
 		options?: {
 			imageLinks?: readonly (string | undefined)[];
 			reuseSettledComponent?: boolean;
+			superseded?: boolean;
 		},
 	): Component[] {
 		return this.#uiHelpers.addMessageToChat(message, options);

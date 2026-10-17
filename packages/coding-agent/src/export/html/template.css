@@ -602,6 +602,15 @@
       margin-bottom: -2px;
     }
 
+    .superseded-answer > summary {
+      color: var(--dim);
+      cursor: pointer;
+    }
+
+    .superseded-answer[open] > summary {
+      margin-bottom: 8px;
+    }
+
     .assistant-text {
       padding: 0;
       color: var(--assistantMessageText, var(--text));

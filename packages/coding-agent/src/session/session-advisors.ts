@@ -4,6 +4,7 @@ import {
 	type AgentMessage,
 	type AgentTool,
 	type AgentToolContext,
+	type AgentTurnEndContext,
 	AppendOnlyContextManager,
 	type CompactionSummaryMessage,
 	resolveTelemetry,
@@ -42,6 +43,7 @@ import { extractProviderRetryHint } from "@oh-my-pi/pi-ai/utils/retry-after";
 import { modelsAreEqual } from "@oh-my-pi/pi-catalog/models";
 import { extractHttpStatusFromError, logger, prompt } from "@oh-my-pi/pi-utils";
 import type { AdvisorConfig } from "@oh-my-pi/pi-tui/overlays/advisor-config";
+import { isUserRequestEntry } from "@oh-my-pi/pi-tui/chat/transcript-entry";
 import {
 	ADVISOR_DEFAULT_BUDGET_PER_UPDATE,
 	ADVISOR_DEFAULT_TOOL_NAMES,
@@ -89,6 +91,7 @@ import { bridgeToolMap } from "../cursor-bridge-tools";
 import { estimateContextToolSchemaTokens } from "@oh-my-pi/pi-tui/status-line/context-usage";
 import type { PlanModeState } from "../plan-mode/state";
 import advisorBoundaryGuidance from "../prompts/advisor/boundary-guidance.md" with { type: "text" };
+import finalAnswerReplacementTemplate from "../prompts/advisor/final-answer-replacement.md" with { type: "text" };
 import advisorSystemPrompt from "../prompts/advisor/system.md" with { type: "text" };
 import type { SecretObfuscator } from "../secrets/obfuscator";
 import {
@@ -122,6 +125,7 @@ import type { YieldQueue } from "./yield-queue";
 
 import {
 	cfgAdvisorEvictStaleResults,
+	cfgAdvisorFinalSync,
 	cfgAdvisorImmuneTurns,
 	cfgAdvisorLateConcern,
 	cfgAdvisorMaxNotesPerUpdate,
@@ -132,6 +136,26 @@ import {
 import { cfgCompaction, cfgContextPromotionEnabled } from "./context-settings";
 import { resolveModelCompactionSettings } from "./model-compaction-threshold";
 import { cfgRetry, cfgTierAdvisor } from "./settings";
+
+/** Single wall-clock budget for every advisor at a final-sync gate. */
+const FINAL_SYNC_WAIT_MS = 30_000;
+
+/**
+ * Once-per-user-run final-sync record. `waiting` while the gate collects final
+ * reviews, `continuing` once one replacement turn was requested, `closed` when
+ * the gate settled; later notes in the same run stay visible cards.
+ */
+interface FinalSyncRun {
+	sessionId: string;
+	generation: number;
+	userMessage: AgentMessage | undefined;
+	draft: AssistantMessage;
+	state: "waiting" | "continuing" | "closed";
+	/** Persisted draft entry ID a successful replacement may still claim. */
+	pendingTarget: string | undefined;
+	consolidating: boolean;
+	superseded: boolean;
+}
 
 const ADVISOR_CODEX_SSE_MAX_ATTEMPTS = 1;
 
@@ -517,6 +541,10 @@ export interface SessionAdvisorsHost {
 		phase: CodexCompactionContext["phase"];
 	}): CodexCompactionContext;
 	sessionId(): string;
+	agentKind(): "main" | "sub";
+	promptGeneration(): number;
+	persistedAssistantEntryId(message: AssistantMessage): string | undefined;
+	waitForSessionMessagePersistence(message: AgentMessage): Promise<void>;
 	/** Put an advisor's provider session under the primary session's account pools. */
 	restrictOAuthAccounts(providerSessionId: string): void;
 }
@@ -605,6 +633,8 @@ export class SessionAdvisors {
 	#advisorInterruptImmuneTurnStart: number | undefined;
 	#pendingAdvisorCardEvents = new Set<Promise<void>>();
 	#advisorYieldQueueUnsubscribe: (() => void) | undefined;
+	#finalSync: FinalSyncRun | undefined;
+	#finalSyncAbort: AbortController | undefined;
 
 	constructor(host: SessionAdvisorsHost, options: SessionAdvisorsOptions) {
 		this.#host = host;
@@ -629,9 +659,10 @@ export class SessionAdvisors {
 	/** Queues eligible primary updates for each live advisor. */
 	async onPrimaryTurnEnd(
 		messages: AgentMessage[],
-		willContinue: boolean | undefined,
+		context: AgentTurnEndContext | undefined,
 		signal?: AbortSignal,
 	): Promise<void> {
+		const willContinue = context?.willContinue;
 		const terminalBoundary = willContinue !== true;
 		const terminalTextBoundary = terminalBoundary && this.#hasTerminalTextAnswerWithoutQueuedWork(messages);
 		if (terminalTextBoundary) this.#terminalUnwindActive = true;
@@ -643,6 +674,7 @@ export class SessionAdvisors {
 		// final, so non-blocker notes must preserve instead of steering a fresh
 		// turn against completed work.
 		this.#advisorTerminalBoundaryOpen = !this.#advisorPrimaryWillContinue;
+		let finalSync: { run: FinalSyncRun; signal: AbortSignal } | undefined;
 		try {
 			this.#retuneAutoThinkingAdvisors();
 			if (!this.#advisorPrimaryWillContinue) {
@@ -657,6 +689,7 @@ export class SessionAdvisors {
 			const advisorContinuation =
 				continuation !== undefined && lastPrimaryUserMessage(messages) === continuation.userMessage;
 			if (!advisorContinuation || !this.#advisorPrimaryWillContinue) this.#advisorContinuation = undefined;
+			if (terminalTextBoundary && !advisorContinuation) finalSync = this.#beginFinalSync(messages, context, signal);
 			// The roster-less default advisor follows the cadence settings live.
 			const defaultReviewMode = cfgAdvisorReviewMode.get(this.#host.settings);
 			const configuredInterval = cfgAdvisorReviewInterval.get(this.#host.settings);
@@ -686,6 +719,19 @@ export class SessionAdvisors {
 					logger.warn("advisor onTurnEnd threw; delta dropped", { advisor: advisor.name, err: String(error) });
 				}
 			}
+			if (finalSync) {
+				// Interval-skipped advisors still review the final draft, once; a
+				// scheduled advisor already sent its held deltas above.
+				for (const advisor of this.#advisors) {
+					if (!scheduledAdvisors?.includes(advisor)) advisor.runtime.flushHeld();
+				}
+				// One shared deadline for every live advisor overrides syncBacklog at this gate only.
+				await Promise.all(
+					this.#advisors.map(advisor => advisor.runtime.waitForCatchup(FINAL_SYNC_WAIT_MS, 1, finalSync!.signal)),
+				);
+				for (const advisor of this.#advisors) advisor.adviseTool.flushDeferredNotes();
+				return;
+			}
 			if (!scheduledAdvisors) return;
 			// Catch-up policy resolves per advisor at each boundary: a roster
 			// entry's `syncBacklog` override wins; omitted entries follow the
@@ -709,12 +755,67 @@ export class SessionAdvisors {
 			this.#advisorTerminalBoundaryOpen = false;
 			// Window closed: deliver everything buffered during flush + catch-up
 			// wait as one merged message (one steer at most, else one card).
-			this.#flushAdvisorBoundaryNotes();
+			if (finalSync) await this.#flushFinalSyncNotes(finalSync.run);
+			else this.#flushAdvisorBoundaryNotes();
 			// With advisor.syncBacklog=off, the review drain can emit after this
 			// callback returns. Keep the terminal guard until the next real agent
 			// start rather than reopening the steer path in that microtask gap.
 			if (!terminalTextBoundary) this.#terminalUnwindActive = false;
 		}
+	}
+
+	/**
+	 * Abort a final-sync wait and void pending replacement claims. An abort
+	 * keeps the draft as this run's fallback; input and transitions drop the run.
+	 */
+	cancelFinalSync(reason: "input" | "abort" | "transition" | "dispose"): void {
+		this.#finalSyncAbort?.abort(reason);
+		this.#finalSyncAbort = undefined;
+		const run = this.#finalSync;
+		if (!run) return;
+		if (reason !== "abort") {
+			this.#finalSync = undefined;
+			return;
+		}
+		run.state = "closed";
+		run.pendingTarget = undefined;
+	}
+
+	/** Close the run's consolidation at a settled agent_end; the run's gate never reopens. */
+	settleFinalSyncRun(): void {
+		const run = this.#finalSync;
+		if (!run) return;
+		run.state = "closed";
+		run.pendingTarget = undefined;
+	}
+
+	/**
+	 * Stamp `message` as the replacement of this run's draft when it is the
+	 * first successful text-only answer of the armed continuation.
+	 */
+	claimSupersession(message: AssistantMessage, generation: number): string | undefined {
+		const run = this.#finalSync;
+		const target = run?.pendingTarget;
+		if (!run || target === undefined || !isTerminalTextAssistantAnswer(message)) return undefined;
+		if (
+			generation !== run.generation ||
+			this.#host.sessionId() !== run.sessionId ||
+			lastPrimaryUserMessage(this.#host.agent.state.messages) !== run.userMessage ||
+			!this.#draftOnActiveRun(target)
+		) {
+			return undefined;
+		}
+		run.pendingTarget = undefined;
+		run.superseded = true;
+		message.supersedesEntryId = target;
+		return target;
+	}
+
+	/** Draft answer of the current run's unsuccessful consolidation, if any. */
+	finalSyncFallbackAnswer(): AssistantMessage | undefined {
+		const run = this.#finalSync;
+		if (!run?.consolidating || run.superseded || !this.#finalSyncOwnsCurrentRun(run)) return undefined;
+		return run.draft;
 	}
 
 	/** Rebuilds live advisors when role assignments alter their resolved runtime inputs. */
@@ -763,6 +864,7 @@ export class SessionAdvisors {
 
 	/** Stops every advisor runtime and starts recorder shutdown. */
 	stopRuntime(): void {
+		this.cancelFinalSync("dispose");
 		this.#stopAdvisorRuntime();
 	}
 
@@ -1048,6 +1150,7 @@ export class SessionAdvisors {
 	 * so none of them inject into the new conversation.
 	 */
 	#resetAdvisorSessionState(preserveCost: boolean): void {
+		this.cancelFinalSync("transition");
 		if (!preserveCost) {
 			this.#advisorCosts.clear();
 			this.#advisorSubscriptionSlugs.clear();
@@ -1737,14 +1840,15 @@ export class SessionAdvisors {
 			severity === "concern" &&
 			this.#terminalUnwindActive &&
 			(advisor.reviewMode ?? cfgAdvisorReviewMode.get(this.#host.settings)) === "agent-end";
+		// Key on the live agent-core loop, not session `isStreaming` (which also
+		// counts `#promptInFlightCount` during post-turn unwind). Only a running
+		// loop consumes a steer at its next boundary.
+		const streaming = this.#host.agent.state.isStreaming && !this.#preserveTerminalYieldAdvice;
 		const channel = resolveAdvisorDeliveryChannel({
 			severity,
 			autoResumeSuppressed: this.#advisorAutoResumeSuppressed,
 			preserveOnly: this.#preserveAdvisorAdvice,
-			// Key on the live agent-core loop, not session `isStreaming` (which also
-			// counts `#promptInFlightCount` during post-turn unwind). Only a running
-			// loop consumes a steer at its next boundary.
-			streaming: this.#host.agent.state.isStreaming && !this.#preserveTerminalYieldAdvice,
+			streaming,
 			aborting: this.#host.abortInProgress(),
 			terminalUnwindActive: this.#terminalUnwindActive,
 			terminalAnswerNoQueuedWork,
@@ -1753,11 +1857,38 @@ export class SessionAdvisors {
 			interruptImmuneTurnActive: interrupting && this.#isAdvisorInterruptImmuneTurnActive(),
 		});
 		const notes: AdvisorNote[] = [{ note, severity, advisor: source }];
-		if (channel === "aside") {
+		// A settled final-sync run never steers again: live work gets a non-interrupting aside, idle a card.
+		const settled = this.#finalSyncSettled();
+		if (channel === "aside" || (settled && channel === "steer" && streaming)) {
 			this.#host.yieldQueue.enqueue("advisor", { note, severity, advisor: source });
 			return;
 		}
-		this.#deliverAdvisorBatch(notes, formatAdvisorBatchContent(notes), channel === "steer");
+		this.#deliverAdvisorBatch(notes, formatAdvisorBatchContent(notes), channel === "steer" && !settled);
+	}
+
+	/** Drain the boundary buffer newest turn first, stamping each note's age. */
+	#takeBoundaryNotes(): AdvisorNote[] | undefined {
+		if (this.#advisorBoundaryNotes.length === 0) return undefined;
+		// Newest turn first, then severity: the latest notes describe the current
+		// state of the work; older ones may already be resolved by it.
+		const notes = [...this.#advisorBoundaryNotes].sort(compareAdvisorNotes);
+		this.#advisorBoundaryNotes = [];
+		for (const n of notes) {
+			if (n.turn !== undefined && this.#advisorPrimaryTurnsCompleted > n.turn) {
+				n.turnsAgo = this.#advisorPrimaryTurnsCompleted - n.turn;
+			}
+		}
+		return notes;
+	}
+
+	/** Merged batch body, headed by the staleness guidance at most once per guidance window. */
+	#boundaryBatchContent(notes: readonly AdvisorNote[]): string {
+		const showGuidance =
+			this.#advisorBoundaryGuidanceLastTurn === undefined ||
+			this.#advisorPrimaryTurnsCompleted - this.#advisorBoundaryGuidanceLastTurn >= ADVISOR_BOUNDARY_GUIDANCE_TURNS;
+		if (showGuidance) this.#advisorBoundaryGuidanceLastTurn = this.#advisorPrimaryTurnsCompleted;
+		const batch = formatAdvisorBatchContent(notes, { currentTurn: this.#advisorPrimaryTurnsCompleted });
+		return showGuidance ? `${ADVISOR_BOUNDARY_GUIDANCE}\n${batch}` : batch;
 	}
 
 	/**
@@ -1773,22 +1904,13 @@ export class SessionAdvisors {
 	 * configured to steer. Otherwise the batch stays a single visible card.
 	 */
 	#flushAdvisorBoundaryNotes(): void {
-		if (this.#advisorBoundaryNotes.length === 0) return;
-		// Newest turn first, then severity: the latest notes describe the current
-		// state of the work; older ones may already be resolved by it.
-		const notes = [...this.#advisorBoundaryNotes].sort(compareAdvisorNotes);
-		this.#advisorBoundaryNotes = [];
-		for (const n of notes) {
-			if (n.turn !== undefined && this.#advisorPrimaryTurnsCompleted > n.turn) {
-				n.turnsAgo = this.#advisorPrimaryTurnsCompleted - n.turn;
-			}
+		const notes = this.#takeBoundaryNotes();
+		if (!notes) return;
+		const content = this.#boundaryBatchContent(notes);
+		if (this.#finalSyncSettled()) {
+			this.#deliverAdvisorBatch(notes, content, false);
+			return;
 		}
-		const showGuidance =
-			this.#advisorBoundaryGuidanceLastTurn === undefined ||
-			this.#advisorPrimaryTurnsCompleted - this.#advisorBoundaryGuidanceLastTurn >= ADVISOR_BOUNDARY_GUIDANCE_TURNS;
-		if (showGuidance) this.#advisorBoundaryGuidanceLastTurn = this.#advisorPrimaryTurnsCompleted;
-		const batch = formatAdvisorBatchContent(notes, { currentTurn: this.#advisorPrimaryTurnsCompleted });
-		const content = showGuidance ? `${ADVISOR_BOUNDARY_GUIDANCE}\n${batch}` : batch;
 		// Snapshot the shared policy inputs once: they cannot change while this
 		// synchronous flush runs. `streaming` is forced false — the primary's turn
 		// IS final even though the loop still reports streaming during the
@@ -1848,11 +1970,7 @@ export class SessionAdvisors {
 			// Plan mode preserves would-be-steering advice as a visible card:
 			// only user-driven turns converge on ask/resolve.
 			const planModePreservesAdvice = this.#host.planModeState()?.enabled === true;
-			const cannotAutoTrigger =
-				!this.#host.agent.state.isStreaming &&
-				this.#host.clientBridge()?.deferAgentInitiatedTurns === true &&
-				!this.#host.allowAgentInitiatedTurns();
-			if (!planModePreservesAdvice && !cannotAutoTrigger) {
+			if (!planModePreservesAdvice && !this.#cannotAutoTriggerAdvisorTurn()) {
 				// Arm the post-interrupt immune window only now that a turn is actually
 				// being steered/triggered. A merely preserved card never interrupts, so
 				// arming earlier would downgrade the next `advisor.immuneTurns` worth of
@@ -1882,6 +2000,178 @@ export class SessionAdvisors {
 			details,
 			timestamp: Date.now(),
 		});
+	}
+
+	/** Idle ACP clients that defer agent-initiated turns cannot show a triggered continuation. */
+	#cannotAutoTriggerAdvisorTurn(): boolean {
+		return (
+			!this.#host.agent.state.isStreaming &&
+			this.#host.clientBridge()?.deferAgentInitiatedTurns === true &&
+			!this.#host.allowAgentInitiatedTurns()
+		);
+	}
+
+	/** A primary main-agent terminal text answer opens this user run's only final-sync gate. */
+	#beginFinalSync(
+		messages: readonly AgentMessage[],
+		context: AgentTurnEndContext | undefined,
+		signal: AbortSignal | undefined,
+	): { run: FinalSyncRun; signal: AbortSignal } | undefined {
+		const draft = context?.message;
+		if (
+			!cfgAdvisorFinalSync.get(this.#host.settings) ||
+			this.#host.agentKind() !== "main" ||
+			!isTerminalTextAssistantAnswer(draft) ||
+			signal?.aborted ||
+			this.#host.isDisposed() ||
+			this.#host.abortInProgress() ||
+			!this.#advisors.some(advisor => !advisor.runtime.disposed)
+		) {
+			return undefined;
+		}
+		const sessionId = this.#host.sessionId();
+		const userMessage = lastPrimaryUserMessage(messages);
+		const previous = this.#finalSync;
+		if (previous && previous.sessionId === sessionId && previous.userMessage === userMessage) return undefined;
+		const run: FinalSyncRun = {
+			sessionId,
+			generation: this.#host.promptGeneration(),
+			userMessage,
+			draft,
+			state: "waiting",
+			pendingTarget: undefined,
+			consolidating: false,
+			superseded: false,
+		};
+		this.#finalSync = run;
+		const controller = new AbortController();
+		this.#finalSyncAbort = controller;
+		return { run, signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal };
+	}
+
+	/** A used gate for the current user run: later notes there never steer. */
+	#finalSyncSettled(): boolean {
+		const run = this.#finalSync;
+		return run !== undefined && run.state !== "waiting" && this.#finalSyncOwnsCurrentRun(run);
+	}
+
+	#finalSyncOwnsCurrentRun(run: FinalSyncRun): boolean {
+		return (
+			run.sessionId === this.#host.sessionId() &&
+			lastPrimaryUserMessage(this.#host.agent.state.messages) === run.userMessage
+		);
+	}
+
+	/** Whether `run` still owns the session: same identity, no abort, no newer work queued. */
+	#finalSyncCurrent(run: FinalSyncRun): boolean {
+		return (
+			this.#finalSync === run &&
+			!this.#host.isDisposed() &&
+			!this.#host.abortInProgress() &&
+			this.#host.promptGeneration() === run.generation &&
+			this.#host.sessionId() === run.sessionId &&
+			lastPrimaryUserMessage(this.#host.agent.state.messages) === run.userMessage &&
+			this.#hasTerminalTextAnswerWithoutQueuedWork()
+		);
+	}
+
+	/**
+	 * Deliver a final-sync gate's merged notes: an actionable concern or blocker
+	 * requests one standalone replacement answer; anything else stays a card.
+	 */
+	async #flushFinalSyncNotes(run: FinalSyncRun): Promise<void> {
+		this.#finalSyncAbort = undefined;
+		const notes = this.#takeBoundaryNotes();
+		const preserve = (): void => {
+			if (notes) this.#deliverAdvisorBatch(notes, this.#boundaryBatchContent(notes), false);
+		};
+		if (this.#finalSync !== run || run.state !== "waiting") {
+			preserve();
+			return;
+		}
+		run.state = "closed";
+		if (!notes) return;
+		const terminalAnswerNoQueuedWork = this.#hasTerminalTextAnswerWithoutQueuedWork();
+		const interruptImmuneTurnActive = this.#isAdvisorInterruptImmuneTurnActive();
+		const aborting = this.#host.abortInProgress();
+		const steer = notes.some(
+			n =>
+				isInterruptingSeverity(n.severity) &&
+				resolveAdvisorDeliveryChannel({
+					severity: n.severity,
+					autoResumeSuppressed: this.#advisorAutoResumeSuppressed,
+					preserveOnly: this.#preserveAdvisorAdvice,
+					streaming: false,
+					aborting,
+					terminalAnswerNoQueuedWork,
+					interruptImmuneTurnActive,
+					allowTerminalConcernSteering: true,
+				}) === "steer",
+		);
+		if (
+			!steer ||
+			this.#host.planModeState()?.enabled === true ||
+			this.#cannotAutoTriggerAdvisorTurn() ||
+			!this.#finalSyncCurrent(run)
+		) {
+			preserve();
+			return;
+		}
+		// The relation must name the draft's exact persisted entry; an unpersisted draft cannot be superseded.
+		let draftEntryId: string | undefined;
+		try {
+			await this.#host.waitForSessionMessagePersistence(run.draft);
+			draftEntryId = this.#host.persistedAssistantEntryId(run.draft);
+		} catch (err) {
+			logger.debug("advisor final-sync draft persistence failed", { err: String(err) });
+		}
+		if (draftEntryId === undefined || !this.#finalSyncCurrent(run)) {
+			preserve();
+			return;
+		}
+		run.state = "continuing";
+		run.consolidating = true;
+		run.pendingTarget = draftEntryId;
+		this.#recordAdvisorInterruptDelivered();
+		this.#advisorContinuation = { userMessage: run.userMessage };
+		const content = prompt.render(finalAnswerReplacementTemplate, {
+			advice: formatAdvisorBatchContent(notes, { currentTurn: this.#advisorPrimaryTurnsCompleted }),
+		});
+		const streaming = this.#host.agent.state.isStreaming;
+		try {
+			const delivered = await this.#host.sendCustomMessage(
+				{
+					customType: "advisor",
+					content,
+					display: true,
+					attribution: "agent",
+					details: { notes } satisfies AdvisorMessageDetails,
+				},
+				{ deliverAs: "steer", triggerTurn: true },
+			);
+			// A steer queued into the live loop reports false; it still runs at the loop's next decision.
+			if (delivered || streaming) return;
+		} catch (err) {
+			logger.debug("advisor final-sync delivery failed", { err: String(err) });
+		}
+		if (this.#finalSync === run) {
+			run.state = "closed";
+			run.consolidating = false;
+			run.pendingTarget = undefined;
+		}
+		this.#advisorContinuation = undefined;
+		preserve();
+	}
+
+	/** Whether `entryId` is on the active branch with no user request after it. */
+	#draftOnActiveRun(entryId: string): boolean {
+		const branch = this.#host.sessionManager.getBranchView();
+		for (let index = branch.length - 1; index >= 0; index--) {
+			const entry = branch[index]!;
+			if (entry.id === entryId) return true;
+			if (isUserRequestEntry(entry)) return false;
+		}
+		return false;
 	}
 
 	/** Re-prime every advisor's transcript view after an in-conversation history rewrite. */
