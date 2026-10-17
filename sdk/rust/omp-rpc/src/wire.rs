@@ -942,6 +942,7 @@ pub struct AssistantMessage {
 	pub duration: Option<f64>,
 	pub ttft: Option<f64>,
 	pub completed_at: Option<f64>,
+	pub supersedes_entry_id: Option<String>,
 	/// Every key not decoded into a declared field.
 	pub extra: Map<String, Value>,
 }
@@ -1003,6 +1004,9 @@ impl Serialize for AssistantMessage {
 		if let Some(value) = &self.completed_at {
 			map.serialize_entry("completedAt", value)?;
 		}
+		if let Some(value) = &self.supersedes_entry_id {
+			map.serialize_entry("supersedesEntryId", value)?;
+		}
 		for (key, value) in &self.extra {
 			match key.as_str() {
 				"role" if self.role.is_some() => continue,
@@ -1023,6 +1027,7 @@ impl Serialize for AssistantMessage {
 				"duration" if self.duration.is_some() => continue,
 				"ttft" if self.ttft.is_some() => continue,
 				"completedAt" if self.completed_at.is_some() => continue,
+				"supersedesEntryId" if self.supersedes_entry_id.is_some() => continue,
 				_ => {}
 			}
 			map.serialize_entry(key, value)?;
@@ -1053,6 +1058,7 @@ impl<'de> Deserialize<'de> for AssistantMessage {
 			duration: take(&mut extra, "duration"),
 			ttft: take(&mut extra, "ttft"),
 			completed_at: take(&mut extra, "completedAt"),
+			supersedes_entry_id: take(&mut extra, "supersedesEntryId"),
 			extra,
 		})
 	}
