@@ -10,6 +10,8 @@ import type {
 	SessionMessageEntry,
 	ThinkingLevelChangeEntry,
 } from "@oh-my-pi/pi-coding-agent/session/session-entries";
+import { deobfuscateSessionContext } from "@oh-my-pi/pi-coding-agent/secrets/message-transform";
+import { SecretObfuscator } from "@oh-my-pi/pi-coding-agent/secrets/obfuscator";
 import * as snapcompact from "@oh-my-pi/snapcompact";
 
 function msg(id: string, parentId: string | null, role: "user" | "assistant", text: string): SessionMessageEntry {
@@ -63,7 +65,149 @@ function modelChange(id: string, parentId: string | null, provider: string, mode
 	return { type: "model_change", id, parentId, timestamp: "2025-01-01T00:00:00Z", model: `${provider}/${modelId}` };
 }
 
+function replacement(id: string, parentId: string, target: string): SessionMessageEntry {
+	const entry = msg(id, parentId, "assistant", `${id} answer`);
+	if (entry.message.role !== "assistant") throw new Error("Expected assistant fixture");
+	entry.message.supersedesEntryId = target;
+	return entry;
+}
+
 describe("buildSessionContext", () => {
+	describe("answer supersession", () => {
+		it("marks only the draft in transcript mode and leaves model context intact", () => {
+			const entries = [
+				msg("user", null, "user", "question"),
+				msg("draft", "user", "assistant", "draft answer"),
+				replacement("replacement", "draft", "draft"),
+			];
+			const transcript = buildSessionContext(entries, undefined, undefined, { transcript: true });
+			expect(transcript.supersededAt).toEqual([false, true, false]);
+			expect(transcript.messages).toEqual(entries.map(entry => entry.message));
+			const context = buildSessionContext(entries);
+			expect(context.supersededAt).toBeUndefined();
+			for (let index = 0; index < entries.length; index++) {
+				expect(context.messages[index]).toBe(entries[index]!.message);
+			}
+			expect(context.messages).toHaveLength(3);
+			expect(entries.map(entry => entry.message.timestamp)).toEqual([1, 1, 1]);
+		});
+
+		it("resolves only the selected branch, before and after replacement", () => {
+			const entries = [
+				msg("user", null, "user", "question"),
+				msg("draft", "user", "assistant", "draft"),
+				replacement("replacement", "draft", "draft"),
+				msg("sibling", "draft", "assistant", "sibling answer"),
+				msg("after", "replacement", "user", "next question"),
+			];
+			const flags = (leaf: string) =>
+				buildSessionContext(entries, leaf, undefined, { transcript: true }).supersededAt;
+			expect(flags("draft")).toEqual([false, false]);
+			expect(flags("sibling")).toEqual([false, false, false]);
+			expect(flags("replacement")).toEqual([false, true, false]);
+			expect(flags("after")).toEqual([false, true, false, false]);
+		});
+
+		it.each([
+			["unknown", "missing"],
+			["self", "replacement"],
+			["malformed", 7 as unknown as string],
+		])("ignores %s references without changing row alignment", (_name, target) => {
+			const entries = [
+				msg("user", null, "user", "question"),
+				msg("draft", "user", "assistant", "draft"),
+				replacement("replacement", "draft", target),
+			];
+			expect(buildSessionContext(entries, undefined, undefined, { transcript: true }).supersededAt).toEqual([
+				false,
+				false,
+				false,
+			]);
+		});
+
+		it("ignores references to another user run", () => {
+			const entries = [
+				msg("user", null, "user", "question"),
+				msg("draft", "user", "assistant", "draft"),
+				msg("next", "draft", "user", "new question"),
+				replacement("replacement", "next", "draft"),
+			];
+			expect(buildSessionContext(entries, undefined, undefined, { transcript: true }).supersededAt).toEqual([
+				false,
+				false,
+				false,
+				false,
+			]);
+		});
+
+		it("rejects failed replacements and targets before dangling tools are stripped", () => {
+			const draft = msg("draft", "user", "assistant", "draft");
+			const corrected = replacement("replacement", "draft", "draft");
+			if (draft.message.role !== "assistant" || corrected.message.role !== "assistant") {
+				throw new Error("Expected assistant fixtures");
+			}
+			const entries = [msg("user", null, "user", "question"), draft, corrected];
+			corrected.message.stopReason = "error";
+			expect(buildSessionContext(entries, undefined, undefined, { transcript: true }).supersededAt).toEqual([
+				false,
+				false,
+				false,
+			]);
+			corrected.message.stopReason = "stop";
+			draft.message.content.push({ type: "toolCall", id: "dangling", name: "read", arguments: {} });
+			const transcript = buildSessionContext(entries, undefined, undefined, { transcript: true });
+			expect(transcript.supersededAt).toEqual([false, false, false]);
+			expect(transcript.messages).toHaveLength(3);
+		});
+
+		it("retains flags when restoring obfuscated answer content", () => {
+			const obfuscator = new SecretObfuscator([{ type: "plain", content: "test-secret" }]);
+			const draft = msg("draft", "user", "assistant", obfuscator.obfuscate("draft test-secret"));
+			const entries = [msg("user", null, "user", "question"), draft, replacement("replacement", "draft", "draft")];
+			const transcript = buildSessionContext(entries, undefined, undefined, { transcript: true });
+			const restored = deobfuscateSessionContext(transcript, obfuscator);
+			expect(restored.supersededAt).toEqual([false, true, false]);
+			expect(restored.supersededAt).toBe(transcript.supersededAt);
+			expect(restored.messages).toHaveLength(restored.supersededAt!.length);
+			const answer = restored.messages[1];
+			if (answer?.role !== "assistant") throw new Error("Expected restored assistant");
+			expect(answer.content).toEqual([{ type: "text", text: "draft test-secret" }]);
+		});
+
+		it("keeps flags aligned when compaction elides an earlier superseded draft", () => {
+			const entries = [
+				msg("old-user", null, "user", "old question"),
+				msg("old-draft", "old-user", "assistant", "old draft"),
+				replacement("old-replacement", "old-draft", "old-draft"),
+				msg("user", "old-replacement", "user", "kept question"),
+				msg("draft", "user", "assistant", "kept draft"),
+				compaction("compact", "draft", "summary", "user"),
+				replacement("replacement", "compact", "draft"),
+			];
+			const transcript = buildSessionContext(entries, undefined, undefined, {
+				transcript: true,
+				collapseCompactedHistory: true,
+			});
+			expect(transcript.messages.map(message => message.role)).toEqual([
+				"user",
+				"assistant",
+				"compactionSummary",
+				"assistant",
+			]);
+			expect(transcript.supersededAt).toEqual([false, true, false, false]);
+			expect(transcript.supersededAt).toHaveLength(transcript.messages.length);
+			expect(buildSessionContext(entries, undefined, undefined, { transcript: true }).supersededAt).toEqual([
+				false,
+				true,
+				false,
+				false,
+				true,
+				false,
+				false,
+			]);
+		});
+	});
+
 	describe("trivial cases", () => {
 		it("empty entries returns empty context", () => {
 			const ctx = buildSessionContext([]);

@@ -1,5 +1,9 @@
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import { customMessageEntryMessage, isUserRequestEntry } from "@oh-my-pi/pi-tui/chat/transcript-entry";
+import {
+	customMessageEntryMessage,
+	isUserRequestEntry,
+	supersededAnswerEntryIds,
+} from "@oh-my-pi/pi-tui/chat/transcript-entry";
 import { getAnthropicCompactionPayload, isTurnStartEntry } from "@oh-my-pi/pi-agent-core/compaction";
 import {
 	coerceServiceTierByFamily,
@@ -127,6 +131,8 @@ export interface SessionContext {
 	 * Only populated in transcript mode.
 	 */
 	cacheMissExplainedAt?: boolean[];
+	/** Display-only superseded-answer flags parallel to messages in transcript mode. */
+	supersededAt?: boolean[];
 }
 
 /** Lists session model strings to try when restoring, in fallback order. */
@@ -361,6 +367,8 @@ export function buildSessionContext(
 	// 3. Emit messages after compaction
 	const messages: AgentMessage[] = [];
 	const cacheMissExplainedAt: boolean[] = [];
+	const supersededAt: boolean[] = [];
+	const supersededIds = options?.transcript ? supersededAnswerEntryIds(path.filter(isTranscriptEntry)) : undefined;
 	let pendingReset = false;
 	let currentMode = "none";
 	let lastAssistantModel: string | undefined;
@@ -389,10 +397,11 @@ export function buildSessionContext(
 		return cacheMissExplained;
 	};
 
-	const pushMessage = (msg: AgentMessage) => {
+	const pushMessage = (msg: AgentMessage, entryId?: string) => {
 		messages.push(msg);
 		if (!options?.transcript) return;
 		cacheMissExplainedAt.push(trackMessageCacheState(msg));
+		supersededAt.push(entryId !== undefined && supersededIds?.has(entryId) === true);
 	};
 
 	const appendMessage = (entry: SessionEntry) => {
@@ -405,7 +414,7 @@ export function buildSessionContext(
 			) {
 				return;
 			}
-			pushMessage(entry.message);
+			pushMessage(entry.message, entry.id);
 		} else if (entry.type === "custom_message") {
 			if (
 				!options?.transcript &&
@@ -414,7 +423,7 @@ export function buildSessionContext(
 				return;
 			}
 			const message = customMessageEntryMessage(entry);
-			if (message) pushMessage(message);
+			if (message) pushMessage(message, entry.id);
 		} else if (entry.type === "branch_summary" && entry.summary) {
 			pushMessage(createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp));
 		}
@@ -767,6 +776,7 @@ export function buildSessionContext(
 	return {
 		messages,
 		cacheMissExplainedAt: options?.transcript ? cacheMissExplainedAt : undefined,
+		supersededAt: options?.transcript ? supersededAt : undefined,
 		thinkingLevel,
 		configuredThinkingLevel,
 		serviceTier,

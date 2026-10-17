@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import * as vm from "node:vm";
+import { supersededAnswerEntryIds, type TranscriptEntryLike } from "@oh-my-pi/pi-tui/chat/transcript-entry";
 import { type Document, Element, parseHTML } from "@oh-my-pi/pi-utils/dom";
 import { Marked } from "@oh-my-pi/pi-utils/marked";
 
@@ -35,7 +36,11 @@ interface RenderedSession {
 	lastScrolledId: () => string | null;
 }
 
-function renderSession(entries: unknown[], leafId: string): RenderedSession {
+function renderSession(
+	entries: unknown[],
+	leafId: string,
+	options: { search?: string; subSessions?: Record<string, { entries: unknown[]; leafId: string }> } = {},
+): RenderedSession {
 	const { document, window } = parseHTML(templateHtml);
 	let lastScrolledId: string | null = null;
 	Object.defineProperty(Element.prototype, "scrollIntoView", {
@@ -57,10 +62,11 @@ function renderSession(entries: unknown[], leafId: string): RenderedSession {
 			},
 			entries,
 			leafId,
+			subSessions: options.subSessions,
 		}),
 	).toBase64();
 	Object.defineProperty(window, "location", {
-		value: new URL("https://example.test/export.html"),
+		value: new URL(`https://example.test/export.html${options.search ?? ""}`),
 		configurable: true,
 	});
 	Object.defineProperty(window, "matchMedia", {
@@ -415,5 +421,288 @@ describe("HTML export assistant content ordering", () => {
 		expect(renderedSidebarOrder(rendered)).toEqual(["assistant: root", "user: branch-b", "user: branch-a"]);
 		const updatedRows = Array.from(rendered.document.querySelectorAll("#tree-container .tree-node"));
 		expect(updatedRows.map(row => row.classList.contains("in-path"))).toEqual([true, true, false]);
+	});
+});
+
+function answerEntry(
+	id: string,
+	parentId: string | null,
+	supersedesEntryId?: unknown,
+	message: Record<string, unknown> = {},
+) {
+	return {
+		type: "message",
+		id,
+		parentId,
+		timestamp: "2026-01-01T00:00:01.000Z",
+		message: {
+			role: "assistant",
+			content: [{ type: "text", text: id }],
+			stopReason: "stop",
+			timestamp: 1,
+			supersedesEntryId,
+			...message,
+		},
+	};
+}
+
+function collapsedAnswerIds(document: Document): string[] {
+	return Array.from(document.querySelectorAll("details.superseded-answer > .assistant-message")).map(node =>
+		node.id.replace(/^entry-/, ""),
+	);
+}
+
+describe("HTML export answer supersession", () => {
+	const draft = answerEntry("draft", null);
+	const replacement = answerEntry("replacement", "draft", "draft");
+	const fixtures: { name: string; entries: unknown[]; expected: string[] }[] = [
+		{ name: "same-run answers with duplicate timestamps", entries: [draft, replacement], expected: ["draft"] },
+		{
+			name: "thinking, redacted thinking and images accompany terminal text",
+			entries: [
+				answerEntry("draft", null, undefined, {
+					content: [
+						{ type: "text", text: "draft" },
+						{ type: "thinking", thinking: "reasoning" },
+						{ type: "redactedThinking", data: "opaque" },
+						{ type: "image", mimeType: "image/png", data: "aa" },
+					],
+				}),
+				answerEntry("replacement", "draft", "draft", {
+					content: [
+						{ type: "thinking", thinking: "review" },
+						{ type: "text", text: "replacement" },
+					],
+				}),
+			],
+			expected: ["draft"],
+		},
+		{ name: "unknown target", entries: [draft, answerEntry("replacement", "draft", "missing")], expected: [] },
+		{ name: "non-string target", entries: [draft, answerEntry("replacement", "draft", 1)], expected: [] },
+		{ name: "self reference", entries: [draft, answerEntry("replacement", "draft", "replacement")], expected: [] },
+		{
+			name: "forward reference",
+			entries: [answerEntry("replacement", null, "draft"), answerEntry("draft", "replacement")],
+			expected: [],
+		},
+		{
+			name: "pruned target",
+			entries: [answerEntry("replacement", "pruned-draft", "pruned-draft")],
+			expected: [],
+		},
+		{
+			name: "replacement chains retain both superseded targets",
+			entries: [draft, replacement, answerEntry("last", "replacement", "replacement")],
+			expected: ["draft", "replacement"],
+		},
+		{
+			name: "real user input starts another run",
+			entries: [
+				draft,
+				{
+					type: "message",
+					id: "request",
+					parentId: "draft",
+					timestamp: draft.timestamp,
+					message: { role: "user", content: "new request", timestamp: 1 },
+				},
+				answerEntry("replacement", "request", "draft"),
+			],
+			expected: [],
+		},
+	];
+	for (const stopReason of ["error", "aborted", "length", "toolUse"]) {
+		fixtures.push(
+			{
+				name: `${stopReason} replacement`,
+				entries: [draft, answerEntry("replacement", "draft", "draft", { stopReason })],
+				expected: [],
+			},
+			{
+				name: `${stopReason} target`,
+				entries: [answerEntry("draft", null, undefined, { stopReason }), replacement],
+				expected: [],
+			},
+		);
+	}
+	for (const [name, content] of [
+		["empty", []],
+		["whitespace", [{ type: "text", text: " \n\t " }]],
+		["reasoning-only", [{ type: "thinking", thinking: "reasoning" }]],
+		["image-only", [{ type: "image", mimeType: "image/png", data: "aa" }]],
+		[
+			"tool-calling",
+			[
+				{ type: "text", text: "text" },
+				{ type: "toolCall", id: "tool-1", name: "read", arguments: { path: "file.ts" } },
+			],
+		],
+	] as const) {
+		fixtures.push(
+			{
+				name: `${name} replacement`,
+				entries: [draft, answerEntry("replacement", "draft", "draft", { content })],
+				expected: [],
+			},
+			{
+				name: `${name} target`,
+				entries: [answerEntry("draft", null, undefined, { content }), replacement],
+				expected: [],
+			},
+		);
+	}
+	for (const customType of ["skill-prompt", "collab-prompt", "advisor"]) {
+		for (const attribution of ["user", "agent"]) {
+			for (const type of ["message", "custom_message"]) {
+				fixtures.push({
+					name: `${type} ${attribution} ${customType} request boundary`,
+					entries: [
+						draft,
+						{
+							type,
+							id: "request",
+							parentId: "draft",
+							timestamp: draft.timestamp,
+							...(type === "message"
+								? { message: { role: "custom", customType, attribution, content: "request" } }
+								: { customType, attribution, content: "request", display: false }),
+						},
+						answerEntry("replacement", "request", "draft"),
+					],
+					expected: attribution === "user" && customType !== "advisor" ? [] : ["draft"],
+				});
+			}
+		}
+	}
+	fixtures.push({
+		name: "malformed custom-message content is not a request boundary",
+		entries: [
+			draft,
+			{
+				type: "custom_message",
+				id: "request",
+				parentId: "draft",
+				timestamp: draft.timestamp,
+				customType: "skill-prompt",
+				attribution: "user",
+				content: null,
+				display: false,
+			},
+			answerEntry("replacement", "request", "draft"),
+		],
+		expected: ["draft"],
+	});
+
+	test.each(fixtures)("$name matches the shared transcript resolver", ({ entries, expected }) => {
+		const leaf = entries.at(-1) as { id: string };
+		const rendered = renderSession(entries, leaf.id);
+		expect([...supersededAnswerEntryIds(entries as TranscriptEntryLike[])]).toEqual(expected);
+		expect(collapsedAnswerIds(rendered.document)).toEqual(expected);
+		for (const disclosure of Array.from(rendered.document.querySelectorAll("details.superseded-answer"))) {
+			expect(disclosure.hasAttribute("open")).toBeFalse();
+			expect(disclosure.querySelector("summary")?.textContent).toBe(
+				"Earlier answer superseded after advisor review",
+			);
+		}
+	});
+
+	test("recomputes each branch without leaking cached disclosures or finding sibling targets", () => {
+		const rendered = renderSession(
+			[draft, replacement, answerEntry("sibling", "draft"), answerEntry("other-root", null, "draft")],
+			"replacement",
+		);
+		const select = (id: string) => {
+			const row = rendered.document.querySelector(`#tree-container .tree-node[data-id="${id}"]`);
+			if (!row) throw new Error(`Missing tree entry ${id}`);
+			row.click();
+		};
+		expect(collapsedAnswerIds(rendered.document)).toEqual(["draft"]);
+		for (const id of ["sibling", "draft", "other-root", "replacement", "sibling", "replacement"]) {
+			select(id);
+			expect(collapsedAnswerIds(rendered.document)).toEqual(id === "replacement" ? ["draft"] : []);
+			expect(rendered.document.querySelector("details details")).toBeNull();
+		}
+	});
+
+	test("deep links open the original before scrolling without losing its blocks or copy link", () => {
+		const rendered = renderSession(
+			[
+				answerEntry("draft", null, undefined, {
+					content: [
+						{ type: "text", text: "`<unsafe>` draft" },
+						{ type: "thinking", thinking: "original reasoning" },
+						{ type: "image", mimeType: "image/png", data: "aa" },
+					],
+				}),
+				replacement,
+			],
+			"replacement",
+			{ search: "?leafId=replacement&targetId=draft" },
+		);
+		const original = rendered.document.getElementById("entry-draft");
+		expect(original?.closest("details")?.hasAttribute("open")).toBeTrue();
+		expect(rendered.lastScrolledId()).toBe("entry-draft");
+		expect(original?.classList.contains("highlight")).toBeTrue();
+		expect(original?.querySelector(".assistant-text")?.textContent).toContain("<unsafe> draft");
+		expect(original?.querySelector("unsafe")).toBeNull();
+		expect(original?.querySelector(".thinking-text")?.textContent).toBe("original reasoning");
+		expect(original?.querySelector(".message-image")?.getAttribute("src")).toBe("data:image/png;base64,aa");
+		expect(original?.querySelector(".copy-link-btn")?.getAttribute("data-entry-id")).toBe("draft");
+	});
+
+	test("includes every billed answer in the header totals", () => {
+		const rendered = renderSession(
+			[
+				answerEntry("draft", null, undefined, {
+					usage: { input: 10, output: 20, cost: { input: 0.1, output: 0.2 } },
+				}),
+				answerEntry("replacement", "draft", "draft", {
+					usage: { input: 30, output: 40, cost: { input: 0.3, output: 0.4 } },
+				}),
+			],
+			"replacement",
+		);
+		const header = rendered.document.getElementById("header-container")?.textContent;
+		expect(header).toContain("2 assistant");
+		expect(header).toContain("↑40 ↓60");
+		expect(header).toContain("$1.000");
+		expect(rendered.document.querySelectorAll(".assistant-message")).toHaveLength(2);
+	});
+
+	test("resolves each embedded sub-session path without borrowing main or sibling targets", () => {
+		const rendered = renderSession(
+			[
+				answerEntry("task", null, undefined, {
+					stopReason: "toolUse",
+					content: [{ type: "toolCall", id: "task-call", name: "task", arguments: {} }],
+				}),
+			],
+			"task",
+			{
+				subSessions: {
+					Reviewed: {
+						entries: [draft, replacement, answerEntry("sibling", "draft", "replacement")],
+						leafId: "replacement",
+					},
+					Sibling: { entries: [draft, replacement, answerEntry("sibling", "draft")], leafId: "sibling" },
+					Unrelated: { entries: [answerEntry("replacement", null, "draft")], leafId: "replacement" },
+				},
+			},
+		);
+		const tool = rendered.document.querySelector("omp-tool-view");
+		const key = tool?.getAttribute("data-key");
+		if (!key) throw new Error("Missing task tool payload");
+		for (const agent of ["Reviewed", "Sibling", "Unrelated", "Reviewed"]) {
+			vm.runInContext(
+				`globalThis.__OMP_TOOL_VIEW_DATA.get(${JSON.stringify(key)}).host.openAgent(${JSON.stringify(agent)})`,
+				rendered.context,
+			);
+			const overlay = rendered.document.querySelector(".subsession-body");
+			expect(overlay?.querySelectorAll("details.superseded-answer")).toHaveLength(agent === "Reviewed" ? 1 : 0);
+			if (agent === "Reviewed") {
+				expect(overlay?.querySelector("details > .assistant-message")?.id).toBe("sub-Reviewed-entry-draft");
+				expect(overlay?.querySelector("details")?.hasAttribute("open")).toBeFalse();
+			}
+		}
 	});
 });

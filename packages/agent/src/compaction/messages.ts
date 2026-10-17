@@ -269,8 +269,12 @@ export function convertMessageToLlm(message: AgentMessage): Message | undefined 
 			return { ...message, attribution: message.attribution ?? "user" };
 		case "developer":
 			return { ...message, attribution: message.attribution ?? "agent" };
-		case "assistant":
-			return message;
+		case "assistant": {
+			if (message.supersedesEntryId === undefined) return message;
+			// Display-only relation; never sent to providers.
+			const { supersedesEntryId: _supersedesEntryId, ...rest } = message;
+			return rest;
+		}
 		case "toolResult":
 			return {
 				...message,

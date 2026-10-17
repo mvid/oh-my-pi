@@ -618,23 +618,24 @@ func (v DeveloperMessage) MarshalJSON() ([]byte, error) {
 }
 
 type AssistantMessage struct {
-	Content          []AssistantContent         `json:"content"`
-	API              string                     `json:"api"`
-	Provider         string                     `json:"provider"`
-	Model            string                     `json:"model"`
-	Usage            Usage                      `json:"usage"`
-	StopReason       StopReason                 `json:"stopReason"`
-	Timestamp        float64                    `json:"timestamp"`
-	ResponseID       *string                    `json:"responseId,omitempty"`
-	UpstreamProvider *string                    `json:"upstreamProvider,omitempty"`
-	UpstreamModel    *string                    `json:"upstreamModel,omitempty"`
-	ErrorMessage     *string                    `json:"errorMessage,omitempty"`
-	ErrorStatus      *int64                     `json:"errorStatus,omitempty"`
-	ErrorID          *float64                   `json:"errorId,omitempty"`
-	ProviderPayload  map[string]json.RawMessage `json:"providerPayload,omitempty"`
-	Duration         *float64                   `json:"duration,omitempty"`
-	Ttft             *float64                   `json:"ttft,omitempty"`
-	CompletedAt      *float64                   `json:"completedAt,omitempty"`
+	Content           []AssistantContent         `json:"content"`
+	API               string                     `json:"api"`
+	Provider          string                     `json:"provider"`
+	Model             string                     `json:"model"`
+	Usage             Usage                      `json:"usage"`
+	StopReason        StopReason                 `json:"stopReason"`
+	Timestamp         float64                    `json:"timestamp"`
+	ResponseID        *string                    `json:"responseId,omitempty"`
+	UpstreamProvider  *string                    `json:"upstreamProvider,omitempty"`
+	UpstreamModel     *string                    `json:"upstreamModel,omitempty"`
+	ErrorMessage      *string                    `json:"errorMessage,omitempty"`
+	ErrorStatus       *int64                     `json:"errorStatus,omitempty"`
+	ErrorID           *float64                   `json:"errorId,omitempty"`
+	ProviderPayload   map[string]json.RawMessage `json:"providerPayload,omitempty"`
+	Duration          *float64                   `json:"duration,omitempty"`
+	Ttft              *float64                   `json:"ttft,omitempty"`
+	CompletedAt       *float64                   `json:"completedAt,omitempty"`
+	SupersedesEntryID *string                    `json:"supersedesEntryId,omitempty"`
 	// Extra holds undeclared keys and declared keys whose value did not decode (that field stays zero).
 	// Encoding writes them back, over a declared field with the same key.
 	Extra map[string]json.RawMessage `json:"-"`
@@ -665,6 +666,7 @@ func (v *AssistantMessage) decodeFrom(raw map[string]json.RawMessage) error {
 	d.optional("duration", &out.Duration)
 	d.optional("ttft", &out.Ttft)
 	d.optional("completedAt", &out.CompletedAt)
+	d.optional("supersedesEntryId", &out.SupersedesEntryID)
 	out.Extra = d.rest()
 	if d.err != nil {
 		return d.err
