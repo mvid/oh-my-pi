@@ -55,6 +55,16 @@ describe("printableEvent", () => {
 		expect(printed.message.model).toBe("gpt-test");
 	});
 
+	it("keeps the advisor supersession relation while stripping the replay payload", () => {
+		const event: AgentSessionEvent = {
+			type: "message_end",
+			message: { ...assistant, supersedesEntryId: "draft-entry" },
+		};
+		const printed = JSON.parse(JSON.stringify(printableEvent(event))) as { message: Record<string, unknown> };
+		expect(printed.message.supersedesEntryId).toBe("draft-entry");
+		expect(printed.message.providerPayload).toBeUndefined();
+	});
+
 	it("strips providerPayload from every message in agent_end", () => {
 		const event: AgentSessionEvent = { type: "agent_end", messages: [assistant, assistant] };
 		const printed = JSON.parse(JSON.stringify(printableEvent(event))) as {

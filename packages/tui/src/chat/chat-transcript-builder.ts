@@ -68,6 +68,7 @@ import { groupedReadUsageCallIds, ReadToolGroupComponent, readArgsCollapseIntoGr
 import { isReplyWrite, ReplyWriteComponent, replyDisplayMessage, toolResultReplies } from "./reply-write";
 import { SkillMessageComponent } from "./skill-message";
 import { ToolExecutionComponent, type ToolExecutionHandle } from "./tool-execution";
+import { createSupersededAnswerDisclosure } from "./superseded-answer";
 import { TranscriptContainer } from "../chrome/transcript-container";
 import { createUsageRowBlock, TurnUsageTally, turnElapsedMs } from "../overlays/usage-row";
 import { CollapsedSyntheticMessageComponent, UserMessageComponent } from "./user-message";
@@ -111,6 +112,7 @@ export class ChatTranscriptBuilder {
 	#expandables: Array<{ setExpanded(expanded: boolean): void }> = [];
 	#expanded = false;
 	#entryComponents = new Map<string, Component[]>();
+	#superseded: ReadonlySet<string> | undefined;
 
 	readonly #deps: ChatTranscriptBuilderDeps;
 
@@ -138,6 +140,11 @@ export class ChatTranscriptBuilder {
 	append(entries: TranscriptEntry[]): void {
 		for (const entry of entries) this.#appendEntry(entry);
 		if (this.#readArgs.size === 0 && this.#pendingTools.size === 0) this.#flushPendingUsage();
+	}
+
+	/** Set display projection only when the caller has resolved one branch path. */
+	setSuperseded(ids: ReadonlySet<string>): void {
+		this.#superseded = ids;
 	}
 
 	/**
@@ -184,6 +191,7 @@ export class ChatTranscriptBuilder {
 		this.#todoSnapshot = null;
 		this.#expandables = [];
 		this.#entryComponents.clear();
+		this.#superseded = undefined;
 		this.container.dispose();
 		this.container.clear();
 	}
@@ -196,7 +204,7 @@ export class ChatTranscriptBuilder {
 		const message = transcriptEntryMessage(entry);
 		if (!message) return;
 		const before = this.container.children.length;
-		this.#appendChatMessage(message);
+		this.#appendChatMessage(message, this.#superseded?.has(entry.id) ?? false);
 		const components = this.container.children.slice(before);
 		if (components.length > 0) this.#entryComponents.set(entry.id, components);
 	}
@@ -294,7 +302,7 @@ export class ChatTranscriptBuilder {
 		this.#pendingUsageElapsedMs = undefined;
 	}
 
-	#appendChatMessage(message: AgentMessage): void {
+	#appendChatMessage(message: AgentMessage, superseded = false): void {
 		if (message.role !== "toolResult") this.#flushPendingUsage();
 		if (message.role !== "assistant" && message.role !== "toolResult") {
 			this.#readGroup?.seal();
@@ -302,7 +310,7 @@ export class ChatTranscriptBuilder {
 		}
 		switch (message.role) {
 			case "assistant":
-				this.#appendAssistantMessage(message);
+				this.#appendAssistantMessage(message, superseded);
 				break;
 			case "toolResult":
 				this.#appendToolResult(message);
@@ -417,34 +425,51 @@ export class ChatTranscriptBuilder {
 		return turnElapsedMs(this.#turnStartedAt, message);
 	}
 
-	#appendAssistantMessage(message: Extract<AgentMessage, { role: "assistant" }>): void {
+	#appendAssistantMessage(message: Extract<AgentMessage, { role: "assistant" }>, superseded: boolean): void {
 		const hideThinkingBlock = this.#deps.hideThinkingBlock?.() ?? false;
 		const proseOnlyThinking = this.#deps.proseOnlyThinking ? this.#deps.proseOnlyThinking() : true;
 		const expandThinkingBlocks = this.#deps.expandThinkingBlocks?.() ?? false;
 		const timeline = splitAssistantMessageToolTimeline(message);
-		const assistantComponent = new AssistantMessageComponent(
-			timeline.beforeTools,
-			hideThinkingBlock,
-			() => this.#deps.requestRender(),
-			this.#deps.getMessageRenderer ? undefined : [], // placeholder for thinkingRenderers
-			this.#deps.ui.imageBudget,
-			proseOnlyThinking,
-			this.#deps.linkTargets,
-			expandThinkingBlocks,
-			{ renderers: this.#deps.textRenderers ?? [], contentOffset: 0 },
-		);
-		assistantComponent.pickReactionTarget(this.container.children);
-		this.#mountProse(assistantComponent);
-		let lastAssistantComponent = assistantComponent;
-
-		if (displayPreferences.cacheMissMarker) {
-			const invalidation = detectCacheInvalidation(this.#lastAssistantUsage, message.usage);
-			if (invalidation) assistantComponent.setCacheInvalidation(invalidation);
-		}
+		const invalidation = displayPreferences.cacheMissMarker
+			? detectCacheInvalidation(this.#lastAssistantUsage, message.usage)
+			: undefined;
 		if (message.usage.cacheRead + message.usage.cacheWrite + message.usage.input > 0) {
 			this.#lastAssistantUsage = message.usage;
 		}
-		assistantComponent.setServedModelMismatch(this.#servedModelTracker.check(message));
+		const servedModelMismatch = this.#servedModelTracker.check(message);
+		const turnUsage = this.#turnUsage.add(message, this.#turnStartedAt);
+		const reactionTargets = superseded ? [...this.container.children] : this.container.children;
+		const createBody = () => {
+			const component = new AssistantMessageComponent(
+				timeline.beforeTools,
+				hideThinkingBlock,
+				() => this.#deps.requestRender(),
+				this.#deps.getMessageRenderer ? undefined : [],
+				this.#deps.ui.imageBudget,
+				proseOnlyThinking,
+				this.#deps.linkTargets,
+				expandThinkingBlocks,
+				{ renderers: this.#deps.textRenderers ?? [], contentOffset: 0 },
+			);
+			component.setImagesVisible(displayPreferences.showImages);
+			component.setToolResultImagesVisible(!displayPreferences.hideToolActivity);
+			component.setTableChartsVisible(this.#deps.tableCharts !== false);
+			this.#trackExpandable(component);
+			component.pickReactionTarget(reactionTargets);
+			if (invalidation) component.setCacheInvalidation(invalidation);
+			component.setServedModelMismatch(servedModelMismatch);
+			if (turnUsage) component.setTurnUsage(turnUsage);
+			return component;
+		};
+		let lastAssistantComponent: AssistantMessageComponent | undefined;
+		if (superseded) {
+			const disclosure = createSupersededAnswerDisclosure(createBody);
+			this.#trackExpandable(disclosure);
+			this.container.addChild(disclosure);
+		} else {
+			lastAssistantComponent = createBody();
+			this.container.addChild(lastAssistantComponent);
+		}
 
 		const hasVisibleAssistantContent = assistantHasVisibleContent(message);
 		if (hasVisibleAssistantContent) {
@@ -548,8 +573,7 @@ export class ChatTranscriptBuilder {
 			}
 			appendAssistantSegment(content.id, afterToolSegment);
 		}
-		const turnUsage = this.#turnUsage.add(message, this.#turnStartedAt);
-		if (turnUsage) lastAssistantComponent.setTurnUsage(turnUsage);
+		if (turnUsage) lastAssistantComponent?.setTurnUsage(turnUsage);
 
 		this.#pendingUsage =
 			displayPreferences.showTokenUsage && assistantUsageIsBilled(message.usage) ? message.usage : undefined;
