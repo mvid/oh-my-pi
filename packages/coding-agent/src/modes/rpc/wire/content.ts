@@ -119,6 +119,7 @@ export const messageDefs = {
 		"duration?": "number",
 		"ttft?": "number",
 		"completedAt?": "number",
+		"supersedesEntryId?": "string",
 	},
 	ToolResultMessage: {
 		role: "'toolResult'",

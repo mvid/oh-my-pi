@@ -174,6 +174,10 @@
 - Fixed `read` ignoring JSON and JSONL `?q=` filters and pagination for `local://` and `artifact://` files ([#15767](https://github.com/can1357/oh-my-pi/issues/15767)).
 - Agents can now read saved context notes without accidentally clearing them ([#15748](https://github.com/can1357/oh-my-pi/pull/15748) by [@Komzpa](https://github.com/Komzpa))
 - Fixed startup without an explicit model picking an unrelated authenticated provider instead of the first available model in the configured default fallback chain ([#15781](https://github.com/can1357/oh-my-pi/pull/15781) by [@mvid](https://github.com/mvid))
+### Added
+
+- Added `advisor.finalSync` (off by default): the main agent waits up to 30 seconds for final advisor reviews, and an actionable concern or blocker produces one standalone replacement answer; the earlier answer collapses behind "Earlier answer superseded after advisor review" in the transcript and HTML export while both answers and their usage stay in history
+- Print mode prints the earlier answer when its advisor replacement fails, still reporting the failure and a non-zero exit
 
 ## [18.11.0] - 2026-10-14
 

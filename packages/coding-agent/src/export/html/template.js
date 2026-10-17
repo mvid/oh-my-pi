@@ -179,6 +179,47 @@
         return path;
       }
 
+      function isUserRequestEntry(entry) {
+        let message;
+        if (entry.type === 'message') {
+          if (entry.message.role === 'user') return true;
+          if (entry.message.role !== 'custom') return false;
+          message = entry.message;
+        } else if (entry.type === 'custom_message' &&
+                   (typeof entry.content === 'string' || Array.isArray(entry.content))) {
+          message = entry;
+        } else {
+          return false;
+        }
+        return message.attribution === 'user' &&
+          (message.customType === 'skill-prompt' || message.customType === 'collab-prompt');
+      }
+
+      // Keep this ordered-path resolver in sync with tui/chat/transcript-entry.ts.
+      function supersededAnswerEntryIds(path) {
+        let run = 0;
+        const answers = new Map();
+        const out = new Set();
+        for (const entry of path) {
+          if (isUserRequestEntry(entry)) {
+            run++;
+            continue;
+          }
+          if (entry.type !== 'message' || entry.message.role !== 'assistant') continue;
+          const message = entry.message;
+          if (message.stopReason !== 'stop' || !Array.isArray(message.content) ||
+              message.content.some(block => block.type === 'toolCall') ||
+              !message.content.some(block => block.type === 'text' &&
+                typeof block.text === 'string' && block.text.trim().length > 0)) continue;
+          const target = message.supersedesEntryId;
+          if (typeof target === 'string' && target !== entry.id && answers.get(target) === run) {
+            out.add(target);
+          }
+          answers.set(entry.id, run);
+        }
+        return out;
+      }
+
       /**
        * Flatten tree into list with indentation and connector info.
        * Returns array of { node, indent, showConnector, isLast, gutters, isVirtualRootChild, multipleRoots }.
@@ -1023,8 +1064,10 @@
         const sctx = getSubSctx(key);
         body = document.createElement('div');
         body.className = 'subsession-messages';
-        for (const entry of getPathIn(sub.entries, sub.leafId)) {
-          const node = renderEntryToNode(entry, sctx);
+        const path = getPathIn(sub.entries, sub.leafId);
+        const superseded = supersededAnswerEntryIds(path);
+        for (const entry of path) {
+          const node = renderEntryToNode(entry, sctx, superseded);
           if (node) body.appendChild(node);
         }
         if (!body.firstChild) {
@@ -1471,27 +1514,31 @@
       // Cache for rendered entry DOM nodes
       const entryCache = new Map();
 
-      function renderEntryToNode(entry, sctx) {
+      function renderEntryToNode(entry, sctx, superseded) {
         // Cache main-session nodes only; sub-session bodies are cached whole
         // per key in subSessionBodyCache, so each entry renders once anyway.
         const cacheable = sctx.prefix === '';
+        let node;
         if (cacheable && entryCache.has(entry.id)) {
-          return entryCache.get(entry.id).cloneNode(true);
+          node = entryCache.get(entry.id).cloneNode(true);
+        } else {
+          const html = renderEntry(entry, sctx);
+          if (!html) return null;
+          const template = document.createElement('template');
+          template.innerHTML = html;
+          node = template.content.firstElementChild;
+          if (cacheable && node) entryCache.set(entry.id, node.cloneNode(true));
         }
+        if (!node || !superseded.has(entry.id)) return node;
 
-        // Render to HTML string, then parse to node
-        const html = renderEntry(entry, sctx);
-        if (!html) return null;
-
-        const template = document.createElement('template');
-        template.innerHTML = html;
-        const node = template.content.firstElementChild;
-
-        // Cache the node
-        if (cacheable && node) {
-          entryCache.set(entry.id, node.cloneNode(true));
-        }
-        return node;
+        // Supersession belongs to this path, never to the entry-ID cache.
+        const disclosure = document.createElement('details');
+        disclosure.className = 'superseded-answer';
+        const summary = document.createElement('summary');
+        summary.textContent = 'Earlier answer superseded after advisor review';
+        disclosure.appendChild(summary);
+        disclosure.appendChild(node);
+        return disclosure;
       }
 
       function navigateTo(targetId, scrollMode = 'target', scrollToEntryId = null, scrollTargetDomId = null) {
@@ -1500,6 +1547,7 @@
         currentTargetId = scrollToEntryId || targetId;
         currentTargetAnchorId = scrollTargetDomId;
         const path = getPath(targetId);
+        const superseded = supersededAnswerEntryIds(path);
 
         if (leafChanged) {
           forceTreeRerender();
@@ -1514,7 +1562,7 @@
         const fragment = document.createDocumentFragment();
 
         for (const entry of path) {
-          const node = renderEntryToNode(entry, mainSctx);
+          const node = renderEntryToNode(entry, mainSctx, superseded);
           if (node) {
             fragment.appendChild(node);
           }
@@ -1542,6 +1590,10 @@
             const scrollTargetId = scrollToEntryId || targetId;
             const targetEl = document.getElementById(scrollTargetDomId || `entry-${scrollTargetId}`);
             if (targetEl) {
+              for (let disclosure = targetEl.closest('details'); disclosure;
+                   disclosure = disclosure.parentElement?.closest('details')) {
+                disclosure.setAttribute('open', '');
+              }
               targetEl.scrollIntoView({ block: 'center' });
               if (scrollToEntryId) {
                 targetEl.classList.add('highlight');

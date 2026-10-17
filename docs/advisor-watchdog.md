@@ -238,6 +238,17 @@ advisors:
     syncBacklog: strict
 ```
 
+### Final sync with `advisor.finalSync`
+
+`advisor.finalSync: true` keeps tool-round reviews on their normal cadence and catch-up policy, then gates the main agent's final text answer once per user request:
+
+1. every advisor sends its held updates and the final answer for review, once
+2. the primary waits for all advisors under one 30-second deadline; failing, paused, or disposed advisors release only themselves
+3. the notes merge into one batch; a concern or blocker that passes the usual stop, cooldown, plan-mode, and client-preservation checks asks the primary for one complete replacement answer, nits stay a visible card
+4. the first successful text-only answer of that continuation records `supersedesEntryId` pointing at the earlier answer's session entry, only after its append reached disk
+
+The earlier answer stays in model context, resumes, compaction inputs, raw transcripts, and usage totals. The interactive transcript and HTML export collapse it behind "Earlier answer superseded after advisor review"; append-only clients (ACP, chat bridges without hold logic) still show both. The replacement is not reviewed again: later findings for that request stay visible cards, and new user input, abort, or a session transition cancels a pending wait or replacement. Subagents never use the gate.
+
 Advisor failures do not permanently stall the primary. The host first attempts its credential/fallback recovery. Retriable failures are attempted up to three times before that backlog is dropped; three dropped-backlog cycles halt the runtime until an explicit reset, and a permanent request rejection can halt it after one cycle. A quota/usage-limit failure that cannot recover through credential rotation, model fallback, or a bounded cooldown wait pauses the advisor with its batch retained until `/advisor` rebuilds it, configuration is reloaded, a new session starts, or the process restarts. The primary's catch-up waiters (`advisor.syncBacklog`) are released as soon as an advisor is failing; only the headless shutdown drain waits through recovery.
 
 The advisor also uses `model.toolCallLoopGuard.*` to bound repeated identical tool calls. One detected loop injects a corrective; if the same bound trips again during that review, the review is aborted without treating the stop as a provider failure or starting fallback recovery. The detector resets at the next review/context boundary.

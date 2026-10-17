@@ -122,6 +122,21 @@ export const cfgAdvisorLateConcern = register({
 	},
 });
 
+export const cfgAdvisorFinalSync = register({
+	id: "advisor.finalSync",
+	protocolDefault: ["rpc", "acp"],
+	type: "boolean",
+	default: false,
+	ui: {
+		tab: "model",
+		group: "Advisor",
+		label: "Advisor Final Sync",
+		description:
+			"Wait up to 30 seconds for final advisor reviews, then consolidate actionable feedback into one replacement answer.",
+		condition: "advisorEnabled",
+	},
+});
+
 export const cfgAdvisorMaxNotesPerUpdate = register({
 	id: "advisor.maxNotesPerUpdate",
 	protocolDefault: ["rpc", "acp"],
