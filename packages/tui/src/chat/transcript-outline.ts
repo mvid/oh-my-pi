@@ -8,6 +8,7 @@ import { type Component } from "../tui";
 import { visibleWidth } from "../utils";
 import {
 	isUserRequestEntry,
+	supersededAnswerEntryIds,
 	type TranscriptEntryLike as TranscriptEntry,
 	userMessageLabel,
 	userTurnDraft,
@@ -103,6 +104,7 @@ export class OutlineRowCache {
  * to the turn above.
  */
 export function appendOutlineEntries(builder: ChatTranscriptBuilder, entries: TranscriptEntry[]): OutlineTarget[] {
+	builder.setSuperseded(supersededAnswerEntryIds(entries));
 	const targets: OutlineTarget[] = [];
 	for (const entry of entries) {
 		const children = builder.container.children;

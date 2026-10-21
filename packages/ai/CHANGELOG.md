@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added optional `AssistantMessage.supersedesEntryId`, a display-only link from a replacement answer to the session entry of the answer it supersedes
+
 ## [18.12.5] - 2026-10-21
 
 ### Added

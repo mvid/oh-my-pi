@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Provider requests omit the display-only `supersedesEntryId` from assistant messages
+
 ## [18.12.4] - 2026-10-20
 
 ### Fixed
