@@ -6,7 +6,7 @@
  * - `omp --mode json "prompt"` - JSON event stream
  */
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
-import type { ImageContent } from "@oh-my-pi/pi-ai";
+import type { AssistantMessage, ImageContent } from "@oh-my-pi/pi-ai";
 import { presentNarrationAsAnswer } from "@oh-my-pi/pi-ai/utils/narration";
 import { $flag, logger, postmortem, sanitizeText } from "@oh-my-pi/pi-utils";
 import type { MCPManager } from "../mcp/manager";
@@ -481,6 +481,17 @@ async function runPrintModeCore(
 		!isSilentAbort(assistantMsg) &&
 		!signalTeardownActive();
 
+	// Narration the provider returned as thinking is part of the reply.
+	const writeAnswer = (message: AssistantMessage): void => {
+		for (const content of presentNarrationAsAnswer(message).content) {
+			if (content.type === "text") {
+				writeStdoutLine(`${sanitizeText(content.text)}\n`);
+			} else if (printThoughts && content.type === "thinking" && content.thinking.trim().length > 0) {
+				writeStdoutLine(`${sanitizeText(content.thinking)}\n`);
+			}
+		}
+	};
+
 	// In text mode, output the final response. A terminal failure prints only
 	// the error line below; JSON mode already emitted the assistant message and
 	// stop reason through the event subscription.
@@ -493,17 +504,16 @@ async function runPrintModeCore(
 			) {
 				process.stderr.write(`${sanitizeText(assistantMsg.errorMessage)}\n`);
 			}
-
-			// Output text content; narration the provider returned as thinking is part of the reply.
-			for (const content of presentNarrationAsAnswer(assistantMsg).content) {
-				if (content.type === "text") {
-					writeStdoutLine(`${sanitizeText(content.text)}\n`);
-				} else if (printThoughts && content.type === "thinking" && content.thinking.trim().length > 0) {
-					writeStdoutLine(`${sanitizeText(content.thinking)}\n`);
-				}
-			}
+			writeAnswer(assistantMsg);
 		}
 		session.setTextOutputCommitted(true);
+	} else if (mode === "text" && terminalFailure) {
+		// A failed advisor replacement leaves this run's draft as its answer; the failure still reports below.
+		const fallback = session.getAdvisorFinalSyncFallbackAnswer();
+		if (fallback) {
+			writeAnswer(fallback);
+			session.setTextOutputCommitted(true);
+		}
 	}
 
 	// A turn-fatal exit cannot hold automation for the full normal drain budget.

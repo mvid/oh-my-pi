@@ -43,10 +43,12 @@ function makeAssistantMessage(overrides: Partial<AssistantMessage> = {}): Assist
 function createMockSession(
 	messages: AssistantMessage[],
 	dispose: (options?: AgentSessionDisposeOptions) => Promise<void> = async () => {},
+	finalSyncFallback?: AssistantMessage,
 ): AgentSession {
 	return {
 		state: { messages },
 		getLastAssistantMessage: () => messages.findLast(message => message.role === "assistant"),
+		getAdvisorFinalSyncFallbackAnswer: () => finalSyncFallback,
 		settings: Settings.isolated(),
 		sessionManager: {
 			getHeader: () => undefined,
@@ -217,5 +219,40 @@ describe("Print-mode exit status", () => {
 		stdoutOutput = [];
 		await runPrintMode(createMockSession([message]), { mode: "text", printThoughts: true, messages: ["hello"] });
 		expect(stdoutOutput.join("")).toBe("inspect hidden branch\nfinal answer\n");
+	});
+
+	it("prints the advisor final-sync draft when its replacement fails", async () => {
+		const draft = makeAssistantMessage({ content: [{ type: "text", text: "draft answer" }] });
+		const failed = makeAssistantMessage({ stopReason: "error", errorMessage: "Replacement failed", content: [] });
+
+		const exitCode = await runPrintMode(createMockSession([draft, failed], undefined, draft), {
+			mode: "text",
+			messages: ["hello"],
+		});
+
+		expect(stdoutOutput.join("")).toBe("draft answer\n");
+		expect(stderrOutput.join("")).toContain("Replacement failed");
+		expect(exitCode).toBe(1);
+	});
+
+	it("never substitutes an earlier answer when no final-sync draft is pending", async () => {
+		const earlier = makeAssistantMessage({ content: [{ type: "text", text: "previous request answer" }] });
+		const failed = makeAssistantMessage({ stopReason: "error", errorMessage: "Request failed", content: [] });
+
+		const exitCode = await runPrintMode(createMockSession([earlier, failed]), { mode: "text", messages: ["hello"] });
+
+		expect(stdoutOutput.join("")).toBe("");
+		expect(exitCode).toBe(1);
+	});
+
+	it("prints only the successful replacement, not its superseded draft", async () => {
+		const draft = makeAssistantMessage({ content: [{ type: "text", text: "draft answer" }] });
+		const replacement = makeAssistantMessage({
+			content: [{ type: "text", text: "replacement answer" }],
+			supersedesEntryId: "draft-entry",
+		});
+
+		expect(await runPrintMode(createMockSession([draft, replacement]), { mode: "text", messages: ["hello"] })).toBe(0);
+		expect(stdoutOutput.join("")).toBe("replacement answer\n");
 	});
 });
