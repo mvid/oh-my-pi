@@ -183,6 +183,11 @@ async function runSmokeTest(): Promise<void> {
 
 const AGENT_BRIDGE_CONTRACT = {
 	version: 1,
+	restrictTools: true,
+	perCallModel: false,
+	perCallTimeout: true,
+	servedModel: true,
+	servedFamily: true,
 	panelLineupFreeze: true,
 } as const;
 
@@ -555,6 +560,10 @@ export async function runCli(argv: string[]): Promise<void> {
 
 	if (resolvedArgv[0] === "--smoke-test") {
 		await runSmokeTest();
+		return;
+	}
+	if (resolvedArgv[0] === "--agent-bridge-contract") {
+		process.stdout.write(`${JSON.stringify(AGENT_BRIDGE_CONTRACT)}\n`);
 		return;
 	}
 
