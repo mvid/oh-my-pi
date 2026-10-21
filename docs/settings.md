@@ -882,6 +882,7 @@ tui:
 | `tui.completeScrollback`      | boolean | `false`          | Send transcript rows pushed off screen by a growing HUD or dialog straight to scrollback. When it shrinks, blank rows sit between the transcript and the input until new output fills them. |
 | `tui.tmuxWindowName`          | boolean | `false`          | Keep the enclosing tmux window named after the session, without its title card (`<icon> <CODE>: `). |
 | `tui.tmuxWindowNameColor`     | boolean | `false`          | Tint this tmux window's status entry with the session accent color, independently of window renaming; restore its prior styles on exit. |
+| `display.showUsageModels`     | boolean | `true`           | List the models mapped to each provider's live usage data in `/usage`.    |
 
 For a custom status line, set `statusLine.preset: custom` and configure `statusLine.leftSegments`, `statusLine.rightSegments`, and `statusLine.segmentOptions`. Include `status` in either segment list to render extension statuses registered through `ctx.ui.setStatus()`, ordered by key and joined inline. Set `statusLine.showHookStatus: false` to suppress the same statuses in the footer.
 
