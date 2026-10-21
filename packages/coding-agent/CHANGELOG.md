@@ -6,6 +6,8 @@
 
 - Added the `_session/steering` ACP extension (advertised as `_meta.steering.supported`), so clients such as agent-shell can steer a running turn; a steer sent while a permission dialog is open cancels that dialog, and `_meta.steering.queue: "followUp"` queues a follow-up instead ([#15885](https://github.com/can1357/oh-my-pi/pull/15885) by [@marcintustin](https://github.com/marcintustin))
 - `/mcp reauth <name>` now works over ACP, RPC, and print mode (`omp -p '/mcp reauth <name>'`): it opens the browser, prints the authorization URL, reconnects the server in the running session, and print mode exits 1 when reauthorization fails ([#16046](https://github.com/can1357/oh-my-pi/pull/16046) by [@marcintustin](https://github.com/marcintustin))
+- Added `advisor.finalSync` (off by default): the main agent waits up to 30 seconds for final advisor reviews, and a note at or above `advisor.continueSeverity` produces one standalone replacement answer; the earlier answer collapses behind "Earlier answer superseded after advisor review" in the transcript and HTML export while both answers and their usage stay in history
+- Print mode prints the earlier answer when its advisor replacement fails, still reporting the failure and a non-zero exit
 
 ### Changed
 

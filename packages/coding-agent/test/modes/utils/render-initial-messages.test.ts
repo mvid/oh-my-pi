@@ -18,13 +18,16 @@ import { kStreamingPartialJson } from "@oh-my-pi/pi-ai/utils/block-symbols";
 import { resetSettingsForTest, Settings } from "@oh-my-pi/pi-coding-agent/config/settings";
 import { AssistantMessageComponent } from "@oh-my-pi/pi-tui/chat/assistant-message";
 import { TranscriptContainer } from "@oh-my-pi/pi-tui/chrome/transcript-container";
+import { Disclosure } from "@oh-my-pi/pi-tui/components/disclosure";
+import { isUsageRowBlock } from "@oh-my-pi/pi-tui/overlays/usage-row";
+import { cfgDisplayShowTokenUsage } from "@oh-my-pi/pi-coding-agent/modes/settings";
 import { initTheme } from "@oh-my-pi/pi-tui/theme";
 import type { InteractiveModeContext, RenderSessionContextOptions } from "@oh-my-pi/pi-coding-agent/modes/types";
 import { UiHelpers } from "@oh-my-pi/pi-coding-agent/modes/utils/ui-helpers";
 import type { SessionContext, StrippedToolCallsMarker } from "@oh-my-pi/pi-coding-agent/session/session-context";
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import { type Component, Container, Image, ImageProtocol, setTerminalImageProtocol, TERMINAL } from "@oh-my-pi/pi-tui";
-import { TempDir } from "@oh-my-pi/pi-utils";
+import { formatNumber, TempDir } from "@oh-my-pi/pi-utils";
 
 beforeAll(() => {
 	initTheme();
@@ -231,6 +234,75 @@ function makeRenderCtx(
 	return { ctx, chatContainer };
 }
 
+describe("UiHelpers superseded answers", () => {
+	it("collapses a cached draft on rebuild, and keeps both usage rows outside the disclosure", () => {
+		const draft: AssistantMessage = {
+			...assistantToolCall("unused", "read", {}),
+			content: [
+				{ type: "thinking", thinking: "checking the facts" },
+				{ type: "text", text: "draft answer" },
+			],
+			stopReason: "stop",
+			usage: { ...emptyUsage, input: 4242, output: 7, totalTokens: 4249 },
+		};
+		const replacement: AssistantMessage = {
+			...draft,
+			content: [{ type: "text", text: "corrected standalone answer" }],
+			supersedesEntryId: "draft",
+			usage: { ...emptyUsage, input: 2121, output: 11, totalTokens: 2132 },
+		};
+		const transcript = transcriptWith([draft, replacement]);
+		const { ctx, chatContainer } = makeRenderCtx(transcript);
+		cfgDisplayShowTokenUsage.set(ctx.settings, true);
+		ctx.renderSessionContext(transcript);
+		const cachedDraft = ctx.transcriptMessageComponents.get(draft);
+		const cachedReplacement = ctx.transcriptMessageComponents.get(replacement);
+		expect(cachedDraft).toBeInstanceOf(AssistantMessageComponent);
+		chatContainer.clear();
+		transcript.supersededAt = [true, false];
+		ctx.renderSessionContext(transcript, { reuseSettledComponents: true });
+
+		const disclosure = chatContainer.children.find(child => child instanceof Disclosure);
+		expect(disclosure).toBeInstanceOf(Disclosure);
+		expect(ctx.transcriptMessageComponents.get(draft)).toBe(disclosure);
+		expect(ctx.transcriptMessageComponents.get(replacement)).toBe(cachedReplacement);
+		const collapsed = Bun.stripANSI(chatContainer.render(120).join("\n"));
+		expect(collapsed).toContain("Earlier answer superseded after advisor review");
+		expect(collapsed).not.toContain("draft answer");
+		expect(collapsed).toContain("corrected standalone answer");
+		const usageRows = chatContainer.children.filter(isUsageRowBlock);
+		expect(usageRows).toHaveLength(2);
+		expect(usageRows[0]!.render(120).join("\n")).toContain(formatNumber(draft.usage.input));
+		expect(usageRows[1]!.render(120).join("\n")).toContain(formatNumber(replacement.usage.input));
+		expect(
+			transcript.messages.reduce(
+				(total, message) => total + (message.role === "assistant" ? message.usage.totalTokens : 0),
+				0,
+			),
+		).toBe(6381);
+
+		disclosure!.handleNativeEvent({ type: "toggle", key: "", collapsed: false });
+		expect(chatContainer.render(120).join("\n")).toContain("draft answer");
+		disclosure!.setExpanded(false);
+		expect(chatContainer.render(120).join("\n")).not.toContain("draft answer");
+		expect(chatContainer.children.filter(isUsageRowBlock)).toEqual(usageRows);
+		chatContainer.disposeChildren();
+	});
+
+	it("keeps an unmarked answer expanded even when another row is superseded", () => {
+		const draft: AssistantMessage = {
+			...assistantToolCall("unused", "read", {}),
+			content: [{ type: "text", text: "earlier answer" }],
+			stopReason: "stop",
+		};
+		const transcript = { ...transcriptWith([draft]), supersededAt: [false] };
+		const { ctx, chatContainer } = makeRenderCtx(transcript);
+		ctx.renderSessionContext(transcript);
+		expect(chatContainer.children.some(child => child instanceof Disclosure)).toBe(false);
+		expect(chatContainer.render(120).join("\n")).toContain("earlier answer");
+		chatContainer.disposeChildren();
+	});
+});
 describe("UiHelpers.renderInitialMessages — transcript source", () => {
 	it("renders the collapsed live display transcript, never the LLM context", async () => {
 		await Settings.init({ inMemory: true });
