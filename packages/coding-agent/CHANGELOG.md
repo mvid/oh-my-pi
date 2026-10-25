@@ -6,6 +6,8 @@
 
 - Anthropic web search and Files API uploads follow `PI_ANTHROPIC_API_VERSION=2026-10-21`; web search omits `temperature` under that version ([#16706](https://github.com/can1357/oh-my-pi/pull/16706) by [@H4vC](https://github.com/H4vC))
 - llama.cpp auto-discovery now also finds local servers on llama-server's new default port 9931 when nothing answers on 8080 ([#16675](https://github.com/can1357/oh-my-pi/pull/16675) by [@bartbroere](https://github.com/bartbroere))
+- Added `advisor.finalSync` (off by default): the main agent waits up to 30 seconds for final advisor reviews, and a note at or above `advisor.continueSeverity` produces one standalone replacement answer; the earlier answer collapses behind "Earlier answer superseded after advisor review" in the transcript and HTML export while both answers and their usage stay in history
+- Print mode prints the earlier answer when its advisor replacement fails, still reporting the failure and a non-zero exit
 
 ### Fixed
 
