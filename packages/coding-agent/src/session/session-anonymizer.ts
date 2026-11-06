@@ -275,6 +275,7 @@ const FIELD_RULES: Record<string, Rule> = {
 		"fromId",
 		"targetId",
 		"sourceEntryId",
+		"supersedesEntryId",
 		"itemId",
 		"turn_id",
 		"artifactId",
