@@ -58,6 +58,8 @@
 - Changing the Codex ultrafast service tier now opens a connection for the selected tier, so requests route correctly
 - Factory Droid requests and login now match the current Droid client
 - Codex HTTP requests (turns, compaction, image generation, web search, model discovery) no longer send `OpenAI-Beta: responses=experimental`, matching the official Codex client
+- Added `PI_ANTHROPIC_API_VERSION=2026-10-21` to send Anthropic API version 2026-10-21 to the official Anthropic API; sampling parameters are omitted under that version, which rejects them ([#16706](https://github.com/can1357/oh-my-pi/pull/16706) by [@H4vC](https://github.com/H4vC))
+- Added optional `AssistantMessage.supersedesEntryId`, a display-only link from a replacement answer to the session entry of the answer it supersedes
 
 ### Fixed
 
