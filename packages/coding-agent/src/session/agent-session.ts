@@ -2586,7 +2586,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
 			await this.#prewalk.advanceAtTurnEnd(messages, context);
 			await this.#flushPendingRoleModelRebind();
 			if (context?.willContinue) this.#steerAnthropicWrapUp();
-			await this.#advisors.onPrimaryTurnEnd(messages, context?.willContinue, signal);
+			await this.#advisors.onPrimaryTurnEnd(messages, context, signal);
 			await this.#maintenance.maintainContextMidRun(messages, signal, context);
 		});
 		this.yieldQueue = new YieldQueue({
@@ -2958,6 +2958,9 @@ export class AgentSession implements SettingsScope, AgentViewSession {
 				this.#recovery.noteRetryFallbackCooldown(selector, retryAfterMs, errorMessage),
 			createCodexCompactionContext: createMaintenanceCodexCompactionContext,
 			sessionId: () => this.sessionId,
+			promptGeneration: () => this.#promptGeneration,
+			persistedAssistantEntryId: message => this.#persistedAssistantEntryId(message),
+			waitForSessionMessagePersistence: message => this.#waitForSessionMessagePersistence(message),
 			restrictOAuthAccounts: providerSessionId => this.#accountPoolScope?.restrict(providerSessionId),
 			agentKind: () => this.#agentKind,
 		};
@@ -4415,6 +4418,20 @@ export class AgentSession implements SettingsScope, AgentViewSession {
 		return false;
 	}
 
+	/** Active-branch entry holding `message`; the loop's turn-end copy is not the persisted object. */
+	#persistedAssistantEntryId(message: AssistantMessage): string | undefined {
+		const stamped = (message as PersistedAssistantMessage)[kPersistedSessionEntryId];
+		if (stamped !== undefined) return stamped;
+		const key = sessionMessagePersistenceKey(message);
+		const branch = this.sessionManager.getBranchView();
+		for (let index = branch.length - 1; index >= 0; index--) {
+			const entry = branch[index];
+			if (entry.type !== "message" || sessionMessagePersistenceKey(entry.message) !== key) continue;
+			if (sameMessageContent(entry.message, message)) return entry.id;
+		}
+		return undefined;
+	}
+
 	#appendSessionMessage(
 		message:
 			| Message
@@ -4869,7 +4886,11 @@ export class AgentSession implements SettingsScope, AgentViewSession {
 		// provider, so the usage row's Δ is exact and provider-independent — some
 		// providers never report `duration` (gitlab-duo) or stamp `timestamp` at
 		// request start. Persisted with the message and read on rebuild.
+		let supersedesEntryId: string | undefined;
 		if (event.type === "message_end" && event.message.role === "assistant") {
+			// Only the advisor controller authors this display relation; never trust provider output.
+			if (event.message.supersedesEntryId !== undefined) delete event.message.supersedesEntryId;
+			supersedesEntryId = this.#advisors.claimSupersession(event.message, eventPromptGeneration);
 			event.message.completedAt = Date.now();
 			this.#tools.bindReplyToCapturedPrompt(event.message);
 		}
@@ -4928,6 +4949,18 @@ export class AgentSession implements SettingsScope, AgentViewSession {
 			);
 		}
 
+		// A collapse must never point at a replacement that did not reach disk.
+		if (supersedesEntryId !== undefined && event.type === "message_end") {
+			try {
+				await messageEndPersistence;
+				await this.sessionManager.flush();
+			} catch (error) {
+				delete (event.message as AssistantMessage).supersedesEntryId;
+				if (displayEvent.type === "message_end")
+					delete (displayEvent.message as AssistantMessage).supersedesEntryId;
+				logger.warn("Advisor replacement answer not durable; keeping the draft visible", { error: String(error) });
+			}
+		}
 		if (event.type !== "agent_end") {
 			try {
 				await this.#emitSessionEvent(displayEvent);
@@ -6038,6 +6071,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
 		options?: AgentEndSettleOptions,
 	): Promise<void> {
 		this.#settledAgentEnd = event;
+		if (options?.willContinue !== true) this.#advisors.settleFinalSyncRun();
 		// Maintenance awaits before settling, and a wake, steer, or scheduled
 		// continuation can start the next run in the meantime. That run already
 		// reported `running`; a late `idle` from this one would leave the session
@@ -7541,6 +7575,11 @@ export class AgentSession implements SettingsScope, AgentViewSession {
 	getLastAssistantMessage(): AssistantMessage | undefined {
 		return this.#prunedTerminalFailure ?? this.#findLastAssistantMessage();
 	}
+
+	/** Draft answer kept when this run's advisor final-sync replacement did not succeed. */
+	getAdvisorFinalSyncFallbackAnswer(): AssistantMessage | undefined {
+		return this.#advisors.finalSyncFallbackAnswer();
+	}
 	/** Current effective system prompt blocks (includes any per-turn extension modifications) */
 	get systemPrompt(): string[] {
 		return this.agent.state.systemPrompt;
@@ -8896,6 +8935,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
 	 */
 	#noteUserTurn(): void {
 		this.#advisors.autoResumeSuppressed = false;
+		this.#advisors.cancelFinalSync("input");
 		this.#planModeReminderCount = 0;
 		this.#planModeReminderAwaitingProgress = false;
 		// A user turn owns the next decision; drop a queued forced choice from
@@ -10370,6 +10410,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
 		// sendCustomMessage aside path (queueAside), which never touches this flag.
 		if (userInitiated) this.#recordUserActivity();
 		if (userInitiated && mode !== "aside") this.#advisors.autoResumeSuppressed = false;
+		if (userInitiated) this.#advisors.cancelFinalSync("input");
 		// The pre-dispatch re-check in prompt() arrives with normalization and the
 		// vision description already done — reuse them instead of paying a second
 		// vision-model request for the same attachment.
@@ -12437,6 +12478,7 @@ export class AgentSession implements SettingsScope, AgentViewSession {
 				this.#turnSettledSinceUserInterrupt = false;
 			}
 		}
+		this.#advisors.cancelFinalSync("abort");
 		// Pull the agent work an editor-restoring interrupt withdrew (clearQueue({ forInterrupt:
 		// true })), and on a user interrupt advisor concerns, out of the steer/follow-up queues
 		// before any await so the post-abort stranded-message drain can't auto-resume the run on
