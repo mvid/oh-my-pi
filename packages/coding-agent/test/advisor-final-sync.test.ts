@@ -13,6 +13,7 @@ import type { SessionMessageEntry } from "@oh-my-pi/pi-coding-agent/session/sess
 import { SessionManager } from "@oh-my-pi/pi-coding-agent/session/session-manager";
 import type { AdvisorConfig } from "@oh-my-pi/pi-tui/overlays/advisor-config";
 import { TempDir } from "@oh-my-pi/pi-utils";
+import { fixedAdvisorTools } from "./helpers/agent-session-setup";
 
 const stepSchema = type({});
 
@@ -113,7 +114,7 @@ async function createHarness(options: HarnessOptions) {
 		sessionManager,
 		settings,
 		modelRegistry: new ModelRegistry(auth, temp.join("models.yml")),
-		advisorTools: [],
+		advisorTools: fixedAdvisorTools(),
 		advisorStreamFn: advisorMock.stream,
 		advisorConfigs: options.advisorConfigs,
 		agentKind: options.agentKind,
