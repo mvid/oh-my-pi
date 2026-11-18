@@ -376,7 +376,7 @@ describe("writeConversationDump", () => {
 		};
 		sourceSession.appendMessage(userMessage);
 		await sourceSession.ensureOnDisk();
-		const artifactId = await sourceSession.saveArtifact("artifact contents", "read");
+		const artifactId = await sourceSession.saveArtifact("artifact contents");
 		await sourceSession.flush();
 		await sourceSession.close();
 
