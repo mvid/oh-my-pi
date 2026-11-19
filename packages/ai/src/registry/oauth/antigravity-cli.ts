@@ -173,6 +173,7 @@ export async function loginAntigravityCli(ctrl: OAuthController): Promise<OAuthC
 				binary,
 				"acp",
 				"--login",
+				"--disable-telemetry",
 				"--gemini-dir",
 				directory,
 				"--app-data-dir",

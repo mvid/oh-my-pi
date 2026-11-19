@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The Antigravity CLI provider now starts `agy` with `--disable-telemetry` for sign-in and requests, so agy no longer uploads usage telemetry to Google
+
 ## [19.0.0] - 2026-11-18
 
 ### Added
