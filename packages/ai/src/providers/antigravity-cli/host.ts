@@ -807,6 +807,7 @@ async function startTransport(options: AgyTransportOptions): Promise<AgyTranspor
 				"--ide-mcp-port",
 				String(bridge.port),
 				"--dangerously-skip-permissions",
+				"--disable-telemetry",
 			],
 			{
 				cwd: options.cwd,
