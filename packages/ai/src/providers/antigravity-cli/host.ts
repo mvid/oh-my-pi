@@ -53,6 +53,9 @@ const QUOTA_EXHAUSTED = /\bRESOURCE_EXHAUSTED\b|\bcode 429\b/;
 const NOTICE_MARK = /^[^\S\n]*(?:⚠\uFE0F?[^\S\n]*)?/;
 const NOTICE_HEAD = "API error (attempt ";
 const NOTICE_ATTEMPT = /^\d*$|^\d+\)(?::.*)?$/;
+// agy 1.5.13+ stops streaming attempt notices and ends a failed turn with only this line.
+const FINAL_QUOTA_NOTICE = /^\s*⚠\uFE0F?[^\S\n]*(RESOURCE_EXHAUSTED \(code 429\):[^\n]*?)\s*$/;
+const FINAL_QUOTA_HEAD = "⚠ RESOURCE_EXHAUSTED (code 429):";
 
 /** Per-step request settings. */
 export interface AgyStepOptions {
@@ -750,7 +753,8 @@ export class AgyHost implements ProviderSessionState {
 
 	/**
 	 * ACP may split a retry notice across chunks, so the unfinished last line is withheld
-	 * until it either reads as a quota notice or can no longer become one.
+	 * until it either reads as a quota notice or can no longer become one. A step's opening
+	 * text is withheld while it may still be agy's final quota notice.
 	 */
 	#stream(kind: "text" | "thinking", chunk: string, writer: StepWriter | undefined): void {
 		if (this.#held?.kind !== kind) this.#releaseHeld(writer);
@@ -759,6 +763,14 @@ export class AgyHost implements ProviderSessionState {
 		const exhausted = quotaRetryNotice(text);
 		if (exhausted) {
 			this.#rateLimited(exhausted);
+			return;
+		}
+		if (
+			kind === "text" &&
+			!writer?.output.content.some(block => block.type === "text") &&
+			mayBecomeFinalQuotaNotice(text)
+		) {
+			this.#held = { kind, text };
 			return;
 		}
 		const lineStart = text.lastIndexOf("\n") + 1;
@@ -799,6 +811,12 @@ export class AgyHost implements ProviderSessionState {
 			return;
 		}
 		const writer = step.writer;
+		const finalQuota = this.#held?.kind === "text" ? FINAL_QUOTA_NOTICE.exec(this.#held.text)?.[1] : undefined;
+		if (finalQuota) {
+			this.#held = undefined;
+			this.#rateLimited(finalQuota);
+			return;
+		}
 		this.#releaseHeld(writer);
 		if (
 			!writer.output.content.some(
@@ -1026,6 +1044,13 @@ export function describeToolArguments(
 	}
 	const message = `Invalid arguments for tool ${name}: ${problem}. Expected schema: ${boundedSchema}`;
 	return message.length > MAX_DIAGNOSTIC_MESSAGE ? `${message.slice(0, MAX_DIAGNOSTIC_MESSAGE)}...` : message;
+}
+
+/** True while a step's text is blank or can still become agy's final quota notice. */
+function mayBecomeFinalQuotaNotice(text: string): boolean {
+	const line = text.trimStart().replace(/^⚠\uFE0F?[^\S\n]*/, "⚠ ");
+	if (line.length <= FINAL_QUOTA_HEAD.length) return FINAL_QUOTA_HEAD.startsWith(line);
+	return line.startsWith(FINAL_QUOTA_HEAD) && !/\n\s*\S/.test(line);
 }
 
 function mapAgyError(error: unknown): Error {
