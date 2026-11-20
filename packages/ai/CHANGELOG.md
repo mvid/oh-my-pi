@@ -8,6 +8,7 @@
 - The auth broker now logs a warning when a transient OAuth refresh failure leaves a login's access token expiring before the next retry; these failures logged only at debug, so a login could stop refreshing and lapse unnoticed ([#19590](https://github.com/can1357/oh-my-pi/pull/19590) by [@will-bogusz](https://github.com/will-bogusz))
 - Fixed chat completions dropping reasoning sent only as `reasoning_details` (Bifrost Gemini) ([#19595](https://github.com/can1357/oh-my-pi/pull/19595) by [@Xytronix](https://github.com/Xytronix))
 - Fixed Antigravity CLI quota exhaustion (`RESOURCE_EXHAUSTED`) streaming into replies as "API error" text; the request now fails with a 429 rate-limit error, so omp's retry, credential rotation and model fallback policy applies instead of a thinking-loop retry ([#19382](https://github.com/can1357/oh-my-pi/pull/19382) by [@gimso2x](https://github.com/gimso2x))
+- Fixed Antigravity CLI 1.5.13+ quota exhaustion arriving as a reply that reads `⚠ RESOURCE_EXHAUSTED (code 429)`; the request now fails with a 429 so model fallback applies
 
 ## [19.0.1] - 2026-11-19
 

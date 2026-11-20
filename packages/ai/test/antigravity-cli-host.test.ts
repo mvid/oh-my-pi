@@ -966,4 +966,39 @@ describe("AgyHost quota retry notices", () => {
 		expect(run.writer.output.content).toEqual([{ type: "text", text: prose.join("") }]);
 		expect(fake.closed).toBe(false);
 	});
+
+	it("fails with a 429 when agy ends the turn with only its final quota notice", async () => {
+		const state = await fixture();
+		const run = step(state.host, [user("hello")]);
+		const fake = await state.started.next();
+		const prompt = await fake.prompts.next();
+		for (const chunk of [
+			"\n⚠ RESOURCE_",
+			"EXHAUSTED (code 429): Resource has been exhausted (e.g. check quota).",
+			"\n",
+		])
+			fake.text(chunk);
+		prompt.response.resolve({ stopReason: "end_turn" });
+		const error: unknown = await run.done.then(
+			() => undefined,
+			cause => cause,
+		);
+		const result = await AIError.finalize(error, { api: model.api, provider: model.provider, model: model.id });
+		expect(result.status).toBe(429);
+		expect(AIError.isUsageLimitOutcome(result.status, result.message)).toBe(true);
+		expect(run.writer.output.content).toEqual([]);
+	});
+
+	it("keeps a reply that opens with the final quota notice text and continues", async () => {
+		const state = await fixture();
+		const run = step(state.host, [user("what does agy print?")]);
+		const fake = await state.started.next();
+		const prompt = await fake.prompts.next();
+		const reply = ["\n⚠ RESOURCE_EXHAUSTED (code 429): Resource has been exhausted.", "\nThat is agy's final error."];
+		for (const chunk of reply) fake.text(chunk);
+		prompt.response.resolve({ stopReason: "end_turn" });
+		await run.done;
+		expect(run.writer.output.content).toEqual([{ type: "text", text: reply.join("") }]);
+		expect(fake.closed).toBe(false);
+	});
 });
